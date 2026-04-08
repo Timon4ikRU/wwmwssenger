@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Ww - Мессенджер</title>
-    <!-- Firebase SDK v12.11.0 -->
     <script type="importmap">
         {
             "imports": {
@@ -67,11 +66,44 @@
         .send-btn { background: #4caf50; border: none; color: white; width: 48px; height: 48px; border-radius: 50%; cursor: pointer; font-size: 20px; }
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.96); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
         .modal-content { background: #131313; padding: 32px; border-radius: 32px; width: 460px; max-width: 90%; max-height: 85vh; overflow-y: auto; }
-        .modal-content h2 { margin-bottom: 20px; font-size: 24px; }
+        .modal-content h2 { margin-bottom: 20px; font-size: 24px; text-align: center; }
         .modal-content input, .modal-content textarea { width: 100%; padding: 14px; margin: 10px 0; background: #1a1a1a; border: 1px solid #2c2c2c; color: white; border-radius: 18px; font-size: 14px; }
-        .modal-content button { width: 100%; padding: 14px; margin-top: 16px; background: #4caf50; border: none; color: white; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: 600; }
+        .modal-content button { width: 100%; padding: 14px; margin-top: 16px; background: #4caf50; border: none; color: white; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: 600; transition: all 0.2s; }
+        .modal-content button:hover { opacity: 0.9; transform: translateY(-1px); }
         .modal-content button.secondary { background: #3a3a3a; }
         .modal-content button.danger { background: #c42e2e; }
+        .google-btn {
+            background: #fff;
+            color: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .google-btn:hover {
+            background: #f0f0f0;
+        }
+        .google-btn img {
+            width: 20px;
+            height: 20px;
+        }
+        .divider {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            margin: 20px 0;
+            color: #666;
+        }
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #2c2c2c;
+        }
+        .divider span {
+            margin: 0 10px;
+            font-size: 12px;
+        }
         .avatar-upload { text-align: center; margin: 20px 0; }
         .avatar-preview { width: 100px; height: 100px; border-radius: 50%; background: #2a2a2a; margin: 0 auto 15px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
         .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
@@ -135,16 +167,26 @@
 </div>
 
 <script type="module">
-    // ==================== FIREBASE ИНИЦИАЛИЗАЦИЯ (НОВАЯ БД) ====================
     import { initializeApp } from "firebase/app";
-    import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendEmailVerification, sendPasswordResetEmail, signOut, onAuthStateChanged } from "firebase/auth";
+    import { 
+        getAuth, 
+        signInWithEmailAndPassword, 
+        createUserWithEmailAndPassword, 
+        sendEmailVerification, 
+        sendPasswordResetEmail, 
+        signOut, 
+        onAuthStateChanged,
+        GoogleAuthProvider,
+        signInWithPopup
+    } from "firebase/auth";
     import { getDatabase, ref, set, update, onValue, off } from "firebase/database";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, orderBy, query, getDocs, writeBatch } from "firebase/firestore";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, orderBy, query } from "firebase/firestore";
     import { getAnalytics } from "firebase/analytics";
 
     const firebaseConfig = {
         apiKey: "AIzaSyCTaSvtnrqyUpsV-30UxBnZZUxkwoKShAg",
         authDomain: "wwmessenger-7c090.firebaseapp.com",
+        databaseURL: "https://wwmessenger-7c090-default-rtdb.europe-west1.firebasedatabase.app",
         projectId: "wwmessenger-7c090",
         storageBucket: "wwmessenger-7c090.firebasestorage.app",
         messagingSenderId: "718456485964",
@@ -157,6 +199,14 @@
     const analytics = getAnalytics(app);
     const rtdb = getDatabase(app);
     const db = getFirestore(app);
+    const googleProvider = new GoogleAuthProvider();
+    
+    // Добавляем параметры для Google провайдера
+    googleProvider.addScope('profile');
+    googleProvider.addScope('email');
+    googleProvider.setCustomParameters({
+        'prompt': 'select_account'
+    });
     
     // ==================== ПЕРЕМЕННЫЕ ====================
     let currentUser = null;
@@ -164,7 +214,6 @@
     let currentChatId = null;
     let currentChatPeerId = null;
     let chats = [];
-    let messagesMap = new Map();
     let onlineStatuses = new Map();
     let usersCache = new Map();
     let typingRef = null;
@@ -175,7 +224,6 @@
     // ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])); }
     
-    // Сжатие изображения до маленького размера (80x80, качество 0.6)
     function compressAvatar(file, maxSize = 80) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -205,23 +253,41 @@
         modal.innerHTML = `
             <div class="modal-content">
                 <h2>🔐 Ww Мессенджер</h2>
+                
+                <button id="googleSignInBtn" class="google-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                    </svg>
+                    Войти через Google
+                </button>
+                
+                <div class="divider">
+                    <span>или</span>
+                </div>
+                
                 <div style="display:flex; gap:10px; margin-bottom:20px;">
                     <button id="loginTabBtn" style="flex:1; background:#4caf50;">Вход</button>
                     <button id="registerTabBtn" style="flex:1; background:#3a3a3a;">Регистрация</button>
                 </div>
+                
                 <div id="loginForm">
                     <input type="email" id="loginEmail" placeholder="Email">
                     <input type="password" id="loginPassword" placeholder="Пароль">
                     <button id="forgotPasswordBtn" class="secondary" style="background:#3a3a3a;">🔑 Забыли пароль?</button>
                     <button id="loginBtn">🔑 Войти</button>
                 </div>
+                
                 <div id="registerForm" style="display:none;">
                     <input type="text" id="regName" placeholder="Ваше имя">
                     <input type="email" id="regEmail" placeholder="Email">
                     <input type="password" id="regPassword" placeholder="Пароль (мин. 6 символов)">
                     <button id="registerBtn">📝 Зарегистрироваться</button>
                 </div>
-                <button id="closeAuthBtn" class="secondary" style="background:#3a3a3a;">Закрыть</button>
+                
+                <button id="closeAuthBtn" class="secondary" style="background:#3a3a3a; margin-top:10px;">Закрыть</button>
             </div>
         `;
         document.body.appendChild(modal);
@@ -233,6 +299,43 @@
         
         loginTab.onclick = () => { loginTab.style.background = '#4caf50'; registerTab.style.background = '#3a3a3a'; loginForm.style.display = 'block'; registerForm.style.display = 'none'; };
         registerTab.onclick = () => { registerTab.style.background = '#4caf50'; loginTab.style.background = '#3a3a3a'; loginForm.style.display = 'none'; registerForm.style.display = 'block'; };
+        
+        // Google вход
+        modal.querySelector('#googleSignInBtn').onclick = async () => {
+            try {
+                const result = await signInWithPopup(auth, googleProvider);
+                const user = result.user;
+                
+                // Проверяем, существует ли пользователь в RTDB
+                const userRef = ref(rtdb, `users/${user.uid}`);
+                const snapshot = await new Promise((resolve) => {
+                    onValue(userRef, resolve, { onlyOnce: true });
+                });
+                
+                if (!snapshot.exists()) {
+                    // Создаем нового пользователя
+                    await set(ref(rtdb, `users/${user.uid}`), {
+                        email: user.email,
+                        name: user.displayName || user.email.split('@')[0],
+                        status: 'online',
+                        lastSeen: Date.now(),
+                        avatarBase64: user.photoURL || null,
+                        bio: ''
+                    });
+                }
+                
+                modal.remove();
+            } catch(err) {
+                console.error("Google auth error:", err);
+                if (err.code === 'auth/popup-blocked') {
+                    alert("Пожалуйста, разрешите всплывающие окна для этого сайта");
+                } else if (err.code === 'auth/unauthorized-domain') {
+                    alert("Ошибка: Домен не авторизован. Добавьте текущий домен в консоли Firebase в разделе Authentication → Authorized domains");
+                } else {
+                    alert("Ошибка при входе через Google: " + err.message);
+                }
+            }
+        };
         
         modal.querySelector('#forgotPasswordBtn').onclick = async () => {
             const email = modal.querySelector('#loginEmail').value.trim();
@@ -255,10 +358,7 @@
                     await signOut(auth);
                     return;
                 }
-                currentUser = result.user;
-                await loadUserData();
                 modal.remove();
-                initApp();
             } catch(err) { alert("Ошибка: " + err.message); }
         };
         
@@ -295,23 +395,22 @@
         if (snapshot.exists()) {
             currentUserData = snapshot.val();
         } else {
-            currentUserData = { name: currentUser.email.split('@')[0], email: currentUser.email, avatarBase64: null, bio: '' };
+            currentUserData = { 
+                name: currentUser.displayName || currentUser.email.split('@')[0], 
+                email: currentUser.email, 
+                avatarBase64: currentUser.photoURL || null, 
+                bio: '' 
+            };
             await set(ref(rtdb, `users/${currentUser.uid}`), currentUserData);
         }
         updateProfileUI();
     }
     
-    // ==================== АВАТАР В RTDB (BASE64) ====================
-    async function uploadAvatarToRTDB(file) {
-        if (!file) return null;
-        const compressed = await compressAvatar(file, 80);
-        await update(ref(rtdb, `users/${currentUser.uid}`), { avatarBase64: compressed });
-        currentUserData.avatarBase64 = compressed;
-        updateProfileUI();
-        return compressed;
+    // ==================== ОСТАЛЬНЫЕ ФУНКЦИИ (те же, что и раньше) ====================
+    async function updateStatus(status) {
+        await update(ref(rtdb, `users/${currentUser.uid}`), { status: status, lastSeen: Date.now() });
     }
     
-    // ==================== СТАТУС ОНЛАЙН ====================
     function startPresence() {
         updateStatus('online');
         if (presenceInterval) clearInterval(presenceInterval);
@@ -332,11 +431,6 @@
         });
     }
     
-    async function updateStatus(status) {
-        await update(ref(rtdb, `users/${currentUser.uid}`), { status: status, lastSeen: Date.now() });
-    }
-    
-    // ==================== ЧАТЫ FIRESTORE ====================
     async function loadUserChats() {
         const userChatsRef = doc(db, 'users', currentUser.uid);
         const docSnap = await getDoc(userChatsRef);
@@ -404,7 +498,6 @@
         await addDoc(collection(db, 'chats', currentChatId, 'messages'), message);
         await updateDoc(doc(db, 'chats', currentChatId), { lastMessage: text, lastTime: Date.now() });
         input.value = '';
-        updateStatus('online');
     }
     
     function openChat(chatId, peerId, peerName, peerAvatar) {
@@ -466,7 +559,6 @@
         container.scrollTop = container.scrollHeight;
     }
     
-    // ==================== ПОИСК ====================
     async function searchUsers(query) {
         if (!query.trim()) return [];
         const usersRef = ref(rtdb, 'users');
@@ -485,12 +577,17 @@
     
     async function renderSearchResults(query) {
         const results = await searchUsers(query);
-        const container = document.getElementById('searchResults');
+        let container = document.getElementById('searchResults');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'searchResults';
+            container.className = 'search-results';
+            document.getElementById('searchInput').parentNode.appendChild(container);
+        }
         if (!query.trim() || results.length === 0) { 
-            if (container) container.innerHTML = ''; 
+            container.innerHTML = ''; 
             return; 
         }
-        if (!container) return;
         container.innerHTML = results.map(user => `
             <div class="search-result-item" data-user-id="${user.uid}">
                 <div class="avatar" style="width:40px;height:40px;">${user.avatarBase64 ? `<img src="${user.avatarBase64}">` : user.name.charAt(0).toUpperCase()}</div>
@@ -510,7 +607,6 @@
         });
     }
     
-    // ==================== UI ====================
     function renderChatsList() {
         const container = document.getElementById('chatsList');
         if (chats.length === 0) { container.innerHTML = '<div class="no-items">✨ Нет чатов<br>Найдите друга по email</div>'; return; }
@@ -664,7 +760,6 @@
         modal.querySelector('#closeProfileBtn').onclick = () => modal.remove();
     }
     
-    // ==================== ИНИЦИАЛИЗАЦИЯ ====================
     async function initApp() {
         document.getElementById('connectionStatus').className = 'connection-status online';
         document.getElementById('connectionStatus').innerHTML = '🟢 Онлайн';
@@ -682,10 +777,6 @@
         await loadUserChats();
         
         const searchInput = document.getElementById('searchInput');
-        const searchResults = document.createElement('div');
-        searchResults.id = 'searchResults';
-        searchResults.className = 'search-results';
-        searchInput.parentNode.appendChild(searchResults);
         searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
         document.getElementById('searchBtn').onclick = () => renderSearchResults(searchInput.value);
     }
@@ -699,13 +790,6 @@
     bindEvents();
     onAuthStateChanged(auth, async (user) => {
         if (user) {
-            if (!user.emailVerified) {
-                alert("⚠️ Подтвердите email! Письмо отправлено повторно.");
-                await sendEmailVerification(user);
-                await signOut(auth);
-                showAuthModal();
-                return;
-            }
             currentUser = user;
             await loadUserData();
             initApp();
