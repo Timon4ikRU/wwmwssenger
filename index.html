@@ -254,7 +254,6 @@
     let unsubscribeGroups = null;
     let unsubscribeChannels = null;
     let currentSearchType = 'uid';
-    let lastOnlineCheck = 0;
     
     // WebRTC
     let peerConnection = null;
@@ -262,6 +261,7 @@
     let currentCallId = null;
     let callType = null;
     let callListeners = [];
+    let ringingInterval = null;
     
     const configuration = {
         iceServers: [
@@ -298,6 +298,24 @@
         });
     }
     
+    function playRingSound() {
+        try {
+            const audio = new Audio();
+            // Простой beep через Web Audio
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            const gain = ctx.createGain();
+            oscillator.connect(gain);
+            gain.connect(ctx.destination);
+            oscillator.frequency.value = 440;
+            gain.gain.value = 0.3;
+            oscillator.start();
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 1);
+            oscillator.stop(ctx.currentTime + 1);
+        } catch(e) {}
+    }
+    
     // ==================== HEARTBEAT ====================
     function startHeartbeat() {
         if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -308,7 +326,6 @@
             try {
                 await set(heartbeatRef, { timestamp: Date.now() });
                 await update(ref(rtdb, `users/${currentUser.uid}`), { status: 'online', lastSeen: Date.now() });
-                console.log("❤️ Heartbeat sent");
             } catch(err) { console.warn("Heartbeat error:", err); }
         };
         
@@ -448,38 +465,25 @@
         const usersRef = ref(rtdb, 'users');
         onValue(usersRef, (snapshot) => {
             const users = snapshot.val() || {};
-            console.log("📊 Users update:", Object.keys(users).length, "users");
-            
             for (const [uid, data] of Object.entries(users)) {
                 if (uid !== currentUser.uid) {
                     const isOnline = data.status === 'online' && (Date.now() - (data.lastSeen || 0) < 10000);
-                    const oldStatus = onlineStatuses.get(uid);
                     onlineStatuses.set(uid, isOnline);
                     usersCache.set(uid, { name: data.name, email: data.email, avatarBase64: data.avatarBase64, bio: data.bio, uid: uid });
-                    
-                    if (oldStatus !== isOnline) {
-                        console.log(`🟢 Пользователь ${uid.substring(0,8)}: ${isOnline ? 'ONLINE' : 'offline'}`);
-                    }
                 }
             }
             renderCurrentList();
-            updateCurrentChatStatus();
+            updateChatHeaderStatus();
         });
     }
     
-    function updateCurrentChatStatus() {
+    function updateChatHeaderStatus() {
         if (currentChatType === 'user' && currentChatPeerId) {
             const isOnline = onlineStatuses.get(currentChatPeerId) || false;
             const statusEl = document.getElementById('peerStatus');
-            const callBtns = document.getElementById('callButtons');
-            
             if (statusEl) {
                 statusEl.innerHTML = isOnline ? '🟢 В сети' : '⚪ Не в сети';
                 statusEl.className = isOnline ? 'peer-status online' : 'peer-status offline';
-            }
-            if (callBtns) {
-                callBtns.style.display = isOnline ? 'flex' : 'flex';
-                console.log(`📞 Кнопки звонка ${isOnline ? 'ПОКАЗАНЫ' : 'показаны но заблокированы'}`);
             }
         }
     }
@@ -664,6 +668,7 @@
             if (currentChatId === chatId && currentChatType === type) {
                 currentChatId = null;
                 currentChatType = null;
+                currentChatPeerId = null;
                 document.getElementById('chatName').innerText = 'Ww Мессенджер';
                 document.getElementById('chatAvatar').innerHTML = '✨';
                 document.getElementById('peerStatus').innerHTML = '⚪ Выберите чат';
@@ -712,7 +717,13 @@
         currentChatId = id;
         currentChatType = type;
         currentChatPeerName = name;
-        if (peerId) currentChatPeerId = peerId;
+        
+        if (type === 'user' && peerId) {
+            currentChatPeerId = peerId;
+        } else if (type === 'user' && !peerId) {
+            const chat = chats.find(c => c.id === id);
+            if (chat) currentChatPeerId = chat.peerId;
+        }
         
         document.getElementById('chatName').innerText = name;
         document.getElementById('chatAvatar').innerHTML = avatar ? `<img src="${avatar}">` : (name?.charAt(0).toUpperCase() || '?');
@@ -722,8 +733,7 @@
         let collectionPath = '';
         if (type === 'user') {
             collectionPath = `chats/${id}/messages`;
-            // Обновляем статус сразу
-            updateCurrentChatStatus();
+            updateChatHeaderStatus();
         } else if (type === 'group') {
             collectionPath = `groups/${id}/messages`;
             document.getElementById('peerStatus').innerHTML = '👥 Группа';
@@ -743,8 +753,8 @@
         });
         
         if (typingRef) off(typingRef);
-        if (type === 'user' && peerId) {
-            typingRef = ref(rtdb, `typing/${id}/${peerId}`);
+        if (type === 'user' && currentChatPeerId) {
+            typingRef = ref(rtdb, `typing/${id}/${currentChatPeerId}`);
             onValue(typingRef, (snapshot) => {
                 if (snapshot.val()) {
                     document.getElementById('typingIndicator').style.display = 'block';
@@ -1177,6 +1187,10 @@
     }
     
     function showIncomingCallNotification(callId, call) {
+        playRingSound();
+        if (ringingInterval) clearInterval(ringingInterval);
+        ringingInterval = setInterval(() => playRingSound(), 2000);
+        
         const notification = document.createElement('div');
         notification.className = 'call-notification';
         notification.innerHTML = `
@@ -1190,15 +1204,20 @@
         
         notification.querySelector('.accept').onclick = async () => {
             notification.remove();
+            if (ringingInterval) clearInterval(ringingInterval);
             await acceptCall(callId, call);
         };
         notification.querySelector('.reject').onclick = async () => {
             notification.remove();
+            if (ringingInterval) clearInterval(ringingInterval);
             await update(ref(rtdb, `calls/${callId}`), { status: 'rejected' });
         };
         
         setTimeout(() => {
-            if (notification.parentNode) notification.remove();
+            if (notification.parentNode) {
+                notification.remove();
+                if (ringingInterval) clearInterval(ringingInterval);
+            }
         }, 30000);
     }
     
@@ -1286,6 +1305,7 @@
         currentCallId = null;
         callListeners.forEach(listener => off(listener));
         callListeners = [];
+        if (ringingInterval) clearInterval(ringingInterval);
     }
     
     // ==================== ИНИЦИАЛИЗАЦИЯ ====================
@@ -1328,14 +1348,10 @@
             }
         });
         
-        // Кнопки звонков всегда видны, но при нажатии проверяем онлайн статус
         document.getElementById('audioCallBtn').onclick = () => startCall(false);
         document.getElementById('videoCallBtn').onclick = () => startCall(true);
         document.getElementById('createGroupBtn').onclick = showCreateGroupModal;
         document.getElementById('createChannelBtn').onclick = showCreateChannelModal;
-        
-        // Принудительно показываем кнопки звонков
-        document.getElementById('callButtons').style.display = 'flex';
     }
     
     function bindEvents() {
