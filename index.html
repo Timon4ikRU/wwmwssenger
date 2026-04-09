@@ -259,10 +259,7 @@
     let peerConnection = null;
     let localStream = null;
     let currentCallId = null;
-    let callType = null;
-    let callListeners = [];
     let ringingInterval = null;
-    let callListenerRef = null;
     
     const configuration = {
         iceServers: [
@@ -312,7 +309,7 @@
             oscillator.start();
             gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.8);
             oscillator.stop(ctx.currentTime + 0.8);
-        } catch(e) { console.log("Audio error:", e); }
+        } catch(e) {}
     }
     
     // ==================== HEARTBEAT ====================
@@ -512,108 +509,6 @@
         });
     }
     
-    // ==================== ГРУППЫ ====================
-    function subscribeToGroups() {
-        if (unsubscribeGroups) unsubscribeGroups();
-        const q = fsQuery(collection(db, 'groups'), where('members', 'array-contains', currentUser.uid));
-        unsubscribeGroups = onSnapshot(q, (snapshot) => {
-            groups = [];
-            for (const docSnap of snapshot.docs) {
-                const data = docSnap.data();
-                groups.push({
-                    id: docSnap.id,
-                    type: 'group',
-                    name: data.name,
-                    avatar: data.avatar || null,
-                    description: data.description || '',
-                    members: data.members?.length || 1,
-                    lastMessage: data.lastMessage || '',
-                    lastTime: data.lastTime || 0,
-                    creatorId: data.creatorId
-                });
-            }
-            groups.sort((a,b) => (b.lastTime || 0) - (a.lastTime || 0));
-            if (currentTab === 'groups') renderCurrentList();
-        });
-    }
-    
-    async function createGroup(name, description) {
-        const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        await setDoc(doc(db, 'groups', groupId), {
-            name: name,
-            description: description || '',
-            creatorId: currentUser.uid,
-            members: [currentUser.uid],
-            createdAt: Date.now(),
-            lastMessage: '',
-            lastTime: 0,
-            avatar: null
-        });
-        return groupId;
-    }
-    
-    async function joinGroup(groupId) {
-        const groupRef = doc(db, 'groups', groupId);
-        await updateDoc(groupRef, { members: arrayUnion(currentUser.uid) });
-    }
-    
-    async function leaveGroup(groupId) {
-        const groupRef = doc(db, 'groups', groupId);
-        await updateDoc(groupRef, { members: arrayRemove(currentUser.uid) });
-    }
-    
-    // ==================== КАНАЛЫ ====================
-    function subscribeToChannels() {
-        if (unsubscribeChannels) unsubscribeChannels();
-        const q = fsQuery(collection(db, 'channels'), where('subscribers', 'array-contains', currentUser.uid));
-        unsubscribeChannels = onSnapshot(q, (snapshot) => {
-            channels = [];
-            for (const docSnap of snapshot.docs) {
-                const data = docSnap.data();
-                channels.push({
-                    id: docSnap.id,
-                    type: 'channel',
-                    name: data.name,
-                    avatar: data.avatar || null,
-                    description: data.description || '',
-                    subscribers: data.subscribers?.length || 1,
-                    lastPost: data.lastPost || '',
-                    lastTime: data.lastTime || 0,
-                    creatorId: data.creatorId,
-                    isPublic: data.isPublic !== false
-                });
-            }
-            channels.sort((a,b) => (b.lastTime || 0) - (a.lastTime || 0));
-            if (currentTab === 'channels') renderCurrentList();
-        });
-    }
-    
-    async function createChannel(name, description, isPublic = true) {
-        const channelId = `channel_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-        await setDoc(doc(db, 'channels', channelId), {
-            name: name,
-            description: description || '',
-            creatorId: currentUser.uid,
-            subscribers: [currentUser.uid],
-            createdAt: Date.now(),
-            lastPost: '',
-            lastTime: 0,
-            avatar: null,
-            isPublic: isPublic
-        });
-        return channelId;
-    }
-    
-    async function subscribeToChannel(channelId) {
-        const channelRef = doc(db, 'channels', channelId);
-        await updateDoc(channelRef, { subscribers: arrayUnion(currentUser.uid) });
-    }
-    
-    async function unsubscribeFromChannel(channelId) {
-        const channelRef = doc(db, 'channels', channelId);
-        await updateDoc(channelRef, { subscribers: arrayRemove(currentUser.uid) });
-    }
-    
     async function loadUserInfo(uid) {
         try {
             const userRef = ref(rtdb, `users/${uid}`);
@@ -651,18 +546,6 @@
         try {
             if (type === 'user') {
                 await deleteDoc(doc(db, 'chats', chatId));
-            } else if (type === 'group') {
-                if (groups.find(g => g.id === chatId)?.creatorId === currentUser.uid) {
-                    await deleteDoc(doc(db, 'groups', chatId));
-                } else {
-                    await leaveGroup(chatId);
-                }
-            } else if (type === 'channel') {
-                if (channels.find(c => c.id === chatId)?.creatorId === currentUser.uid) {
-                    await deleteDoc(doc(db, 'channels', chatId));
-                } else {
-                    await unsubscribeFromChannel(chatId);
-                }
             }
             if (currentChatId === chatId && currentChatType === type) {
                 currentChatId = null;
@@ -671,14 +554,12 @@
                 document.getElementById('chatName').innerText = 'Ww Мессенджер';
                 document.getElementById('chatAvatar').innerHTML = '✨';
                 document.getElementById('peerStatus').innerHTML = '⚪ Выберите чат';
-                document.getElementById('peerStatus').className = 'peer-status';
                 document.getElementById('messageInput').disabled = true;
                 document.getElementById('sendBtn').disabled = true;
                 document.getElementById('messagesArea').innerHTML = '<div class="no-items" style="margin-top:60px;">💬 Чат удален</div>';
             }
         } catch(err) {
             console.error("Delete error:", err);
-            alert("Ошибка при удалении: " + err.message);
         }
     }
     
@@ -696,18 +577,8 @@
             time: new Date().toLocaleTimeString().slice(0,5)
         };
         
-        let collectionPath = '';
-        if (currentChatType === 'user') collectionPath = `chats/${currentChatId}/messages`;
-        else if (currentChatType === 'group') collectionPath = `groups/${currentChatId}/messages`;
-        else collectionPath = `channels/${currentChatId}/posts`;
-        
-        await addDoc(collection(db, collectionPath), message);
-        
-        const updateData = { lastMessage: text, lastTime: Date.now() };
-        if (currentChatType === 'user') await updateDoc(doc(db, 'chats', currentChatId), updateData);
-        else if (currentChatType === 'group') await updateDoc(doc(db, 'groups', currentChatId), updateData);
-        else await updateDoc(doc(db, 'channels', currentChatId), updateData);
-        
+        await addDoc(collection(db, `chats/${currentChatId}/messages`), message);
+        await updateDoc(doc(db, 'chats', currentChatId), { lastMessage: text, lastTime: Date.now() });
         input.value = '';
     }
     
@@ -724,7 +595,10 @@
                 const chat = chats.find(c => c.id === id);
                 if (chat) currentChatPeerId = chat.peerId;
             }
-            console.log("📞 Открыт чат с peerId:", currentChatPeerId);
+            console.log("📞 Открыт чат, peerId =", currentChatPeerId);
+            updateChatHeaderStatus();
+        } else {
+            document.getElementById('peerStatus').innerHTML = type === 'group' ? '👥 Группа' : '📢 Канал';
         }
         
         document.getElementById('chatName').innerText = name;
@@ -732,21 +606,7 @@
         document.getElementById('messageInput').disabled = false;
         document.getElementById('sendBtn').disabled = false;
         
-        let collectionPath = '';
-        if (type === 'user') {
-            collectionPath = `chats/${id}/messages`;
-            updateChatHeaderStatus();
-        } else if (type === 'group') {
-            collectionPath = `groups/${id}/messages`;
-            document.getElementById('peerStatus').innerHTML = '👥 Группа';
-            document.getElementById('peerStatus').className = 'peer-status';
-        } else {
-            collectionPath = `channels/${id}/posts`;
-            document.getElementById('peerStatus').innerHTML = '📢 Канал';
-            document.getElementById('peerStatus').className = 'peer-status';
-        }
-        
-        const messagesRef = collection(db, collectionPath);
+        const messagesRef = collection(db, `chats/${id}/messages`);
         const q = fsQuery(messagesRef, orderBy('timestamp', 'asc'));
         unsubscribeMessages = onSnapshot(q, (snapshot) => {
             const msgs = []; 
@@ -754,26 +614,7 @@
             renderMessages(msgs);
         });
         
-        if (typingRef) off(typingRef);
-        if (type === 'user' && currentChatPeerId) {
-            typingRef = ref(rtdb, `typing/${id}/${currentChatPeerId}`);
-            onValue(typingRef, (snapshot) => {
-                if (snapshot.val()) {
-                    document.getElementById('typingIndicator').style.display = 'block';
-                    document.getElementById('typingIndicator').innerHTML = `${name} печатает...`;
-                    setTimeout(() => document.getElementById('typingIndicator').style.display = 'none', 2000);
-                }
-            });
-        }
         renderCurrentList();
-    }
-    
-    function sendTyping() {
-        if (!currentChatId || !currentChatPeerId || currentChatType !== 'user') return;
-        const typingRefSend = ref(rtdb, `typing/${currentChatId}/${currentUser.uid}`);
-        set(typingRefSend, true);
-        if (typingTimeout) clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => set(typingRefSend, null), 2000);
     }
     
     function renderMessages(msgs) {
@@ -801,7 +642,7 @@
         else items = channels;
         
         if (items.length === 0) {
-            container.innerHTML = `<div class="no-items">✨ Нет ${currentTab === 'chats' ? 'чатов' : currentTab === 'groups' ? 'групп' : 'каналов'}<br>${currentTab === 'chats' ? 'Найдите друга по UID' : 'Создайте или подпишитесь'}</div>`;
+            container.innerHTML = `<div class="no-items">✨ Нет ${currentTab === 'chats' ? 'чатов' : currentTab === 'groups' ? 'групп' : 'каналов'}</div>`;
             return;
         }
         container.innerHTML = '';
@@ -811,9 +652,7 @@
             const div = document.createElement('div');
             div.className = `chat-item ${isActive ? 'active' : ''}`;
             let avatarContent = item.avatar ? `<img src="${item.avatar}">` : (item.name?.charAt(0).toUpperCase() || '?');
-            let lastMsg = item.lastMessage || item.lastPost || 'Нет сообщений';
-            if (currentTab === 'groups') lastMsg = `👥 ${item.members} участников • ${lastMsg}`;
-            if (currentTab === 'channels') lastMsg = `📡 ${item.subscribers} подписчиков • ${lastMsg}`;
+            let lastMsg = item.lastMessage || 'Нет сообщений';
             div.innerHTML = `
                 <div class="chat-avatar" style="position:relative;">
                     ${avatarContent}
@@ -827,11 +666,7 @@
             `;
             div.onclick = (e) => {
                 if (e.target.classList.contains('chat-menu')) return;
-                if (item.type === 'user') {
-                    openChat(item.id, item.type, item.name, item.avatar, item.peerId);
-                } else {
-                    openChat(item.id, item.type, item.name, item.avatar);
-                }
+                openChat(item.id, item.type, item.name, item.avatar, item.peerId);
             };
             container.appendChild(div);
         }
@@ -841,8 +676,6 @@
                 e.stopPropagation();
                 const id = btn.dataset.id;
                 const type = btn.dataset.type;
-                const existingMenu = document.querySelector('.dropdown-menu');
-                if (existingMenu) existingMenu.remove();
                 const menu = document.createElement('div');
                 menu.className = 'dropdown-menu';
                 menu.innerHTML = `<button class="delete-chat" data-id="${id}" data-type="${type}">🗑️ Удалить чат</button>`;
@@ -853,57 +686,35 @@
                     menu.remove();
                 };
                 setTimeout(() => {
-                    document.addEventListener('click', function removeMenu() {
-                        if (menu.parentNode) menu.remove();
-                        document.removeEventListener('click', removeMenu);
-                    }, { once: true });
+                    document.addEventListener('click', () => menu.remove(), { once: true });
                 }, 100);
             };
         });
     }
     
     // ==================== ПОИСК ====================
-    async function searchGlobal(query, searchType) {
+    async function searchUsers(query, searchType) {
         if (!query.trim()) return [];
         const results = [];
         const searchLower = query.toLowerCase().trim();
         
-        if (searchType === 'uid' || searchType === 'name') {
-            const usersRef = ref(rtdb, 'users');
-            const snapshot = await get(usersRef);
-            const users = snapshot.val() || {};
-            for (const [uid, data] of Object.entries(users)) {
-                if (uid === currentUser.uid) continue;
-                if (searchType === 'uid' && uid.toLowerCase().includes(searchLower)) {
-                    results.push({ type: 'user', id: uid, name: data.name, avatar: data.avatarBase64, subtitle: `UID: ${uid.substring(0, 10)}...` });
-                } else if (searchType === 'name' && data.name && data.name.toLowerCase().includes(searchLower)) {
-                    results.push({ type: 'user', id: uid, name: data.name, avatar: data.avatarBase64, subtitle: data.email });
-                }
-            }
-        } else if (searchType === 'group') {
-            const groupsRef = collection(db, 'groups');
-            const snapshot = await getDocs(groupsRef);
-            for (const docSnap of snapshot.docs) {
-                const data = docSnap.data();
-                if (data.name.toLowerCase().includes(searchLower)) {
-                    results.push({ type: 'group', id: docSnap.id, name: data.name, avatar: data.avatar, subtitle: `${data.members?.length || 1} участников`, isMember: data.members?.includes(currentUser.uid) });
-                }
-            }
-        } else if (searchType === 'channel') {
-            const channelsRef = collection(db, 'channels');
-            const snapshot = await getDocs(channelsRef);
-            for (const docSnap of snapshot.docs) {
-                const data = docSnap.data();
-                if (data.name.toLowerCase().includes(searchLower) && data.isPublic !== false) {
-                    results.push({ type: 'channel', id: docSnap.id, name: data.name, avatar: data.avatar, subtitle: `${data.subscribers?.length || 1} подписчиков`, isSubscribed: data.subscribers?.includes(currentUser.uid) });
-                }
+        const usersRef = ref(rtdb, 'users');
+        const snapshot = await get(usersRef);
+        const users = snapshot.val() || {};
+        
+        for (const [uid, data] of Object.entries(users)) {
+            if (uid === currentUser.uid) continue;
+            if (searchType === 'uid' && uid.toLowerCase().includes(searchLower)) {
+                results.push({ type: 'user', id: uid, name: data.name, avatar: data.avatarBase64 });
+            } else if (searchType === 'name' && data.name && data.name.toLowerCase().includes(searchLower)) {
+                results.push({ type: 'user', id: uid, name: data.name, avatar: data.avatarBase64 });
             }
         }
         return results;
     }
     
     async function renderSearchResults(query) {
-        const results = await searchGlobal(query, currentSearchType);
+        const results = await searchUsers(query, currentSearchType);
         const container = document.getElementById('searchResults');
         if (!query.trim()) { container.style.display = 'none'; container.innerHTML = ''; return; }
         if (results.length === 0) {
@@ -912,71 +723,28 @@
             return;
         }
         container.style.display = 'block';
-        container.innerHTML = results.map(item => {
-            let actionBtn = '';
-            if (item.type === 'user') {
-                actionBtn = '<button class="action-btn" data-action="chat">💬 Написать</button>';
-            } else if (item.type === 'group') {
-                if (item.isMember) actionBtn = '<button class="action-btn" data-action="open">📂 Открыть</button><button class="action-btn" data-action="leave">🚪 Выйти</button>';
-                else actionBtn = '<button class="action-btn" data-action="join">➕ Вступить</button>';
-            } else if (item.type === 'channel') {
-                if (item.isSubscribed) actionBtn = '<button class="action-btn" data-action="open">📂 Открыть</button><button class="action-btn" data-action="unsubscribe">🔕 Отписаться</button>';
-                else actionBtn = '<button class="action-btn" data-action="subscribe">➕ Подписаться</button>';
-            }
-            return `
-                <div class="search-result-item" data-type="${item.type}" data-id="${item.id}" data-name="${escapeHtml(item.name)}" data-avatar="${item.avatar || ''}">
-                    <div class="avatar" style="width:40px;height:40px;">${item.avatar ? `<img src="${item.avatar}">` : item.name.charAt(0).toUpperCase()}</div>
-                    <div style="flex:1;">
-                        <div><strong>${escapeHtml(item.name)}</strong></div>
-                        <div style="font-size:10px;color:#888;">${item.subtitle}</div>
-                    </div>
-                    <div style="display:flex; gap:6px;">${actionBtn}</div>
+        container.innerHTML = results.map(user => `
+            <div class="search-result-item" data-id="${user.id}" data-name="${escapeHtml(user.name)}" data-avatar="${user.avatar || ''}">
+                <div class="avatar" style="width:40px;height:40px;">${user.avatar ? `<img src="${user.avatar}">` : user.name.charAt(0).toUpperCase()}</div>
+                <div style="flex:1;">
+                    <div><strong>${escapeHtml(user.name)}</strong></div>
+                    <div style="font-size:10px;color:#888;">UID: ${user.id.substring(0, 10)}...</div>
                 </div>
-            `;
-        }).join('');
+                <button class="action-btn" data-action="chat">💬 Написать</button>
+            </div>
+        `).join('');
         
         document.querySelectorAll('.search-result-item').forEach(el => {
-            const type = el.dataset.type;
-            const id = el.dataset.id;
-            const name = el.dataset.name;
-            const avatar = el.dataset.avatar;
-            
-            el.querySelectorAll('.action-btn').forEach(btn => {
-                btn.onclick = async (e) => {
-                    e.stopPropagation();
-                    const action = btn.dataset.action;
-                    if (action === 'chat') {
-                        const chatId = await createOrGetChat(id);
-                        openChat(chatId, 'user', name, avatar, id);
-                    } else if (action === 'join') {
-                        await joinGroup(id);
-                        alert(`Вы вступили в группу "${name}"`);
-                    } else if (action === 'leave') {
-                        await leaveGroup(id);
-                        alert(`Вы вышли из группы "${name}"`);
-                    } else if (action === 'subscribe') {
-                        await subscribeToChannel(id);
-                        alert(`Вы подписались на канал "${name}"`);
-                    } else if (action === 'unsubscribe') {
-                        await unsubscribeFromChannel(id);
-                        alert(`Вы отписались от канала "${name}"`);
-                    } else if (action === 'open') {
-                        openChat(id, type, name, avatar);
-                    }
-                    document.getElementById('searchInput').value = '';
-                    container.style.display = 'none';
-                    container.innerHTML = '';
-                };
-            });
-            
-            if (type === 'user') {
-                el.onclick = async () => {
-                    const chatId = await createOrGetChat(id);
-                    openChat(chatId, 'user', name, avatar, id);
-                    document.getElementById('searchInput').value = '';
-                    container.style.display = 'none';
-                };
-            }
+            el.querySelector('.action-btn').onclick = async (e) => {
+                e.stopPropagation();
+                const id = el.dataset.id;
+                const name = el.dataset.name;
+                const avatar = el.dataset.avatar;
+                const chatId = await createOrGetChat(id);
+                openChat(chatId, 'user', name, avatar, id);
+                document.getElementById('searchInput').value = '';
+                container.style.display = 'none';
+            };
         });
     }
     
@@ -988,58 +756,6 @@
         const avatarDiv = document.getElementById('userAvatar');
         if (currentUserData.avatarBase64) avatarDiv.innerHTML = `<img src="${currentUserData.avatarBase64}">`;
         else avatarDiv.innerHTML = currentUserData.name?.charAt(0).toUpperCase() || 'W';
-    }
-    
-    function showCreateGroupModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <h2>👥 Создать группу</h2>
-                <input type="text" id="groupName" placeholder="Название группы">
-                <textarea id="groupDesc" placeholder="Описание (необязательно)" rows="3"></textarea>
-                <button id="createBtn">Создать</button>
-                <button id="cancelBtn" class="secondary">Отмена</button>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        modal.querySelector('#createBtn').onclick = async () => {
-            const name = modal.querySelector('#groupName').value.trim();
-            if (!name) { alert("Введите название"); return; }
-            const desc = modal.querySelector('#groupDesc').value.trim();
-            await createGroup(name, desc);
-            modal.remove();
-            alert(`Группа "${name}" создана!`);
-        };
-        modal.querySelector('#cancelBtn').onclick = () => modal.remove();
-    }
-    
-    function showCreateChannelModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal';
-        modal.innerHTML = `
-            <div class="modal-content">
-                <h2>📢 Создать канал</h2>
-                <input type="text" id="channelName" placeholder="Название канала">
-                <textarea id="channelDesc" placeholder="Описание (необязательно)" rows="3"></textarea>
-                <label style="display:flex; align-items:center; gap:8px; margin:10px 0;">
-                    <input type="checkbox" id="isPublic" checked> Публичный канал
-                </label>
-                <button id="createBtn">Создать</button>
-                <button id="cancelBtn" class="secondary">Отмена</button>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        modal.querySelector('#createBtn').onclick = async () => {
-            const name = modal.querySelector('#channelName').value.trim();
-            if (!name) { alert("Введите название"); return; }
-            const desc = modal.querySelector('#channelDesc').value.trim();
-            const isPublic = modal.querySelector('#isPublic').checked;
-            await createChannel(name, desc, isPublic);
-            modal.remove();
-            alert(`Канал "${name}" создан!`);
-        };
-        modal.querySelector('#cancelBtn').onclick = () => modal.remove();
     }
     
     function showEditProfileModal() {
@@ -1086,143 +802,122 @@
         modal.querySelector('#closeProfileBtn').onclick = () => modal.remove();
     }
     
-    // ==================== WEBRTC ЗВОНКИ ====================
+    // ==================== WEBRTC ЗВОНКИ (УПРОЩЁННЫЕ) ====================
     async function startCall(isVideo) {
-        if (!currentChatPeerId || currentChatType !== 'user') {
-            alert("Звонки доступны только в личных чатах");
+        if (!currentChatPeerId) {
+            alert("Сначала откройте чат с пользователем");
             return;
         }
         
-        const isOnline = onlineStatuses.get(currentChatPeerId) || false;
+        const isOnline = onlineStatuses.get(currentChatPeerId);
         if (!isOnline) {
             alert("Пользователь не в сети");
             return;
         }
         
-        if (currentCallId) {
-            alert("Уже есть активный звонок");
-            return;
-        }
-        
         callType = isVideo ? 'video' : 'audio';
+        
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
             createCallWindow(isVideo);
+            
             peerConnection = new RTCPeerConnection(configuration);
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-            
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate && currentCallId) {
-                    const candidatesRef = ref(rtdb, `calls/${currentCallId}/iceCandidates/${Date.now()}`);
-                    set(candidatesRef, { candidate: event.candidate.candidate, sdpMid: event.candidate.sdpMid, sdpMLineIndex: event.candidate.sdpMLineIndex });
-                }
-            };
             
             peerConnection.ontrack = (event) => {
                 const remoteVideo = document.getElementById('remoteVideo');
                 if (remoteVideo && event.streams[0]) remoteVideo.srcObject = event.streams[0];
             };
             
-            peerConnection.onconnectionstatechange = () => {
-                if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-                    endCall();
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && currentCallId) {
+                    set(ref(rtdb, `calls/${currentCallId}/ice/${Date.now()}`), {
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex
+                    });
                 }
             };
             
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
             
-            currentCallId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+            currentCallId = `call_${Date.now()}`;
             await set(ref(rtdb, `calls/${currentCallId}`), {
                 from: currentUser.uid,
                 to: currentChatPeerId,
                 status: 'waiting',
                 offer: { type: offer.type, sdp: offer.sdp },
                 type: callType,
-                timestamp: Date.now()
+                time: Date.now()
             });
             
-            listenForCallResponse();
-            console.log("📞 Звонок отправлен пользователю:", currentChatPeerId);
+            // Слушаем ответ
+            const callRef = ref(rtdb, `calls/${currentCallId}`);
+            const listener = onValue(callRef, async (snap) => {
+                const data = snap.val();
+                if (data?.status === 'answered' && data.answer) {
+                    off(listener);
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+                } else if (data?.status === 'rejected') {
+                    off(listener);
+                    endCall();
+                    alert("Звонок отклонен");
+                } else if (data?.status === 'ended') {
+                    off(listener);
+                    endCall();
+                }
+            });
+            
         } catch(err) {
-            console.error("Start call error:", err);
-            alert("Не удалось получить доступ к микрофону/камере");
-            if (localStream) localStream.getTracks().forEach(track => track.stop());
-            localStream = null;
+            console.error(err);
+            alert("Ошибка доступа к микрофону/камере");
+            endCall();
         }
     }
     
-    function listenForCallResponse() {
-        const callRef = ref(rtdb, `calls/${currentCallId}`);
-        callListenerRef = callRef;
-        const listener = onValue(callRef, async (snapshot) => {
-            const data = snapshot.val();
-            if (!data) return;
-            
-            if (data.status === 'answered' && data.answer) {
-                off(listener);
-                if (peerConnection) {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                }
-            } else if (data.status === 'rejected') {
-                off(listener);
-                endCall();
-                alert("Звонок отклонен");
-            } else if (data.status === 'ended') {
-                off(listener);
-                endCall();
-            }
-        });
-        callListeners.push(listener);
-    }
-    
-    function listenForIncomingCalls() {
+    // Слушаем входящие звонки
+    function listenForCalls() {
         const callsRef = ref(rtdb, 'calls');
         onValue(callsRef, (snapshot) => {
             const calls = snapshot.val();
             if (!calls) return;
             
             for (const [callId, call] of Object.entries(calls)) {
-                if (call.to === currentUser.uid && call.status === 'waiting' && !currentCallId) {
-                    console.log("📞 Входящий звонок от:", call.from);
-                    showIncomingCallNotification(callId, call);
+                if (call.to === currentUser?.uid && call.status === 'waiting' && !currentCallId) {
+                    showIncomingCall(callId, call);
                 }
             }
         });
     }
     
-    function showIncomingCallNotification(callId, call) {
+    function showIncomingCall(callId, call) {
         playRingSound();
         if (ringingInterval) clearInterval(ringingInterval);
-        ringingInterval = setInterval(() => playRingSound(), 2000);
+        ringingInterval = setInterval(playRingSound, 2000);
         
-        const notification = document.createElement('div');
-        notification.className = 'call-notification';
-        notification.innerHTML = `
+        const notif = document.createElement('div');
+        notif.className = 'call-notification';
+        notif.innerHTML = `
             <div>📞 ${call.type === 'video' ? 'Видеозвонок' : 'Аудиозвонок'}</div>
-            <div style="margin-top:10px;">
-                <button class="accept">✅ Принять</button>
-                <button class="reject">❌ Отклонить</button>
-            </div>
+            <div><button class="accept">✅ Принять</button> <button class="reject">❌ Отклонить</button></div>
         `;
-        document.body.appendChild(notification);
+        document.body.appendChild(notif);
         
-        notification.querySelector('.accept').onclick = async () => {
-            notification.remove();
-            if (ringingInterval) clearInterval(ringingInterval);
+        notif.querySelector('.accept').onclick = async () => {
+            notif.remove();
+            clearInterval(ringingInterval);
             await acceptCall(callId, call);
         };
-        notification.querySelector('.reject').onclick = async () => {
-            notification.remove();
-            if (ringingInterval) clearInterval(ringingInterval);
+        notif.querySelector('.reject').onclick = async () => {
+            notif.remove();
+            clearInterval(ringingInterval);
             await update(ref(rtdb, `calls/${callId}`), { status: 'rejected' });
         };
         
         setTimeout(() => {
-            if (notification.parentNode) {
-                notification.remove();
-                if (ringingInterval) clearInterval(ringingInterval);
-            }
+            if (notif.parentNode) notif.remove();
+            clearInterval(ringingInterval);
         }, 30000);
     }
     
@@ -1233,24 +928,22 @@
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.type === 'video' });
             createCallWindow(call.type === 'video');
+            
             peerConnection = new RTCPeerConnection(configuration);
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-            
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate && currentCallId) {
-                    const candidatesRef = ref(rtdb, `calls/${currentCallId}/iceCandidates/${Date.now()}`);
-                    set(candidatesRef, { candidate: event.candidate.candidate, sdpMid: event.candidate.sdpMid, sdpMLineIndex: event.candidate.sdpMLineIndex });
-                }
-            };
             
             peerConnection.ontrack = (event) => {
                 const remoteVideo = document.getElementById('remoteVideo');
                 if (remoteVideo && event.streams[0]) remoteVideo.srcObject = event.streams[0];
             };
             
-            peerConnection.onconnectionstatechange = () => {
-                if (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed') {
-                    endCall();
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate && currentCallId) {
+                    set(ref(rtdb, `calls/${currentCallId}/ice/${Date.now()}`), {
+                        candidate: event.candidate.candidate,
+                        sdpMid: event.candidate.sdpMid,
+                        sdpMLineIndex: event.candidate.sdpMLineIndex
+                    });
                 }
             };
             
@@ -1259,17 +952,19 @@
             await peerConnection.setLocalDescription(answer);
             await update(ref(rtdb, `calls/${callId}`), { status: 'answered', answer: { type: answer.type, sdp: answer.sdp } });
             
-            const candidatesRef = ref(rtdb, `calls/${callId}/iceCandidates`);
-            onValue(candidatesRef, (snapshot) => {
-                const candidates = snapshot.val();
-                if (candidates && peerConnection) {
-                    for (const [key, cand] of Object.entries(candidates)) {
+            // Загружаем ICE кандидаты
+            const iceRef = ref(rtdb, `calls/${callId}/ice`);
+            onValue(iceRef, (snap) => {
+                const ice = snap.val();
+                if (ice && peerConnection) {
+                    Object.values(ice).forEach(cand => {
                         peerConnection.addIceCandidate(new RTCIceCandidate(cand));
-                    }
+                    });
                 }
             });
+            
         } catch(err) {
-            console.error("Accept call error:", err);
+            console.error(err);
             endCall();
         }
     }
@@ -1277,44 +972,36 @@
     function createCallWindow(isVideo) {
         const existing = document.getElementById('callWindow');
         if (existing) existing.remove();
-        const window = document.createElement('div');
-        window.id = 'callWindow';
-        window.className = 'call-window';
-        window.innerHTML = `
+        
+        const win = document.createElement('div');
+        win.id = 'callWindow';
+        win.className = 'call-window';
+        win.innerHTML = `
             <div class="video-container">
                 ${isVideo ? '<video id="localVideo" autoplay muted playsinline></video>' : '<div style="text-align:center;padding:40px;">🎤 Аудиозвонок...</div>'}
                 ${isVideo ? '<video id="remoteVideo" autoplay playsinline></video>' : ''}
             </div>
-            <div class="call-controls"><button id="endCallBtn" class="end-call">🔴 Завершить</button></div>
+            <div class="call-controls"><button class="end-call">🔴 Завершить</button></div>
         `;
-        document.body.appendChild(window);
+        document.body.appendChild(win);
+        
         if (isVideo && localStream) {
-            const localVideo = document.getElementById('localVideo');
-            if (localVideo) localVideo.srcObject = localStream;
+            document.getElementById('localVideo').srcObject = localStream;
         }
-        document.getElementById('endCallBtn').onclick = () => endCall();
+        
+        win.querySelector('.end-call').onclick = () => endCall();
     }
     
     async function endCall() {
         if (currentCallId) {
-            try {
-                await update(ref(rtdb, `calls/${currentCallId}`), { status: 'ended' });
-            } catch(e) {}
+            try { await update(ref(rtdb, `calls/${currentCallId}`), { status: 'ended' }); } catch(e) {}
         }
         if (peerConnection) peerConnection.close();
-        if (localStream) localStream.getTracks().forEach(track => track.stop());
-        const callWindow = document.getElementById('callWindow');
-        if (callWindow) callWindow.remove();
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        document.getElementById('callWindow')?.remove();
         peerConnection = null;
         localStream = null;
         currentCallId = null;
-        
-        // Безопасно отключаем все слушатели
-        callListeners.forEach(listener => {
-            try { off(listener); } catch(e) {}
-        });
-        callListeners = [];
-        
         if (ringingInterval) clearInterval(ringingInterval);
     }
     
@@ -1325,9 +1012,24 @@
         updateProfileUI();
         startPresence();
         subscribeToChats();
-        subscribeToGroups();
-        subscribeToChannels();
-        listenForIncomingCalls();
+        listenForCalls();
+        
+        const searchInput = document.getElementById('searchInput');
+        searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
+        document.getElementById('searchBtn').onclick = () => renderSearchResults(searchInput.value);
+        document.querySelectorAll('.search-type-btn').forEach(btn => {
+            btn.onclick = () => {
+                document.querySelectorAll('.search-type-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentSearchType = btn.dataset.searchType;
+                renderSearchResults(searchInput.value);
+            };
+        });
+        
+        document.getElementById('audioCallBtn').onclick = () => startCall(false);
+        document.getElementById('videoCallBtn').onclick = () => startCall(true);
+        document.getElementById('createGroupBtn').onclick = () => alert("Группы в разработке");
+        document.getElementById('createChannelBtn').onclick = () => alert("Каналы в разработке");
         
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.onclick = () => {
@@ -1337,36 +1039,11 @@
                 renderCurrentList();
             };
         });
-        
-        const searchInput = document.getElementById('searchInput');
-        const searchResultsDiv = document.getElementById('searchResults');
-        searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
-        document.getElementById('searchBtn').onclick = () => renderSearchResults(searchInput.value);
-        document.querySelectorAll('.search-type-btn').forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll('.search-type-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentSearchType = btn.dataset.searchType;
-                const placeholders = { uid: "🔍 Введите UID друга", name: "👤 Введите имя пользователя", group: "👥 Введите название группы", channel: "📢 Введите название канала" };
-                searchInput.placeholder = placeholders[currentSearchType] || "🔍 Поиск...";
-                renderSearchResults(searchInput.value);
-            };
-        });
-        document.addEventListener('click', (e) => {
-            if (!searchInput.contains(e.target) && !searchResultsDiv.contains(e.target)) {
-                searchResultsDiv.style.display = 'none';
-            }
-        });
-        
-        document.getElementById('audioCallBtn').onclick = () => startCall(false);
-        document.getElementById('videoCallBtn').onclick = () => startCall(true);
-        document.getElementById('createGroupBtn').onclick = showCreateGroupModal;
-        document.getElementById('createChannelBtn').onclick = showCreateChannelModal;
     }
     
     function bindEvents() {
         document.getElementById('sendBtn').onclick = sendMessage;
-        document.getElementById('messageInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); else sendTyping(); });
+        document.getElementById('messageInput').addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
         document.getElementById('userProfileBtn').onclick = showEditProfileModal;
     }
     
