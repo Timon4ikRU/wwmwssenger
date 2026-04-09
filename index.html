@@ -61,8 +61,6 @@
         .call-buttons { display: flex; gap: 8px; }
         .call-btn { background: #2a2a2a; border: none; color: white; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 18px; transition: all 0.2s; }
         .call-btn:hover { background: #4caf50; transform: scale(1.05); }
-        .call-btn.active { background: #f44336; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 0.8; } 50% { opacity: 1; } 100% { opacity: 0.8; } }
         .messages-area { flex: 1; overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 12px; }
         .message { max-width: 70%; padding: 10px 16px; border-radius: 22px; animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: translateY(0);} }
@@ -78,7 +76,7 @@
         .modal-content h2 { margin-bottom: 20px; font-size: 24px; text-align: center; }
         .modal-content input, .modal-content textarea { width: 100%; padding: 14px; margin: 10px 0; background: #1a1a1a; border: 1px solid #2c2c2c; color: white; border-radius: 18px; font-size: 14px; }
         .modal-content button { width: 100%; padding: 14px; margin-top: 16px; background: #4caf50; border: none; color: white; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: 600; transition: all 0.2s; }
-        .modal-content button:hover { opacity: 0.9; transform: translateY(-1px); }
+        .modal-content button:hover { opacity: 0.9; }
         .modal-content button.secondary { background: #3a3a3a; }
         .modal-content button.danger { background: #c42e2e; }
         .google-btn { background: #fff; color: #000; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -97,11 +95,8 @@
         .search-results { background: #1a1a1a; border-radius: 12px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
         .search-result-item { padding: 10px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-bottom: 1px solid #2c2c2c; transition: background 0.2s; }
         .search-result-item:hover { background: #2a2a2a; }
-        .call-notification { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1a1a1a; border: 2px solid #4caf50; border-radius: 16px; padding: 16px 24px; z-index: 1001; animation: slideUp 0.3s ease; }
-        @keyframes slideUp { from { opacity: 0; transform: translateX(-50%) translateY(50px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-        .call-notification button { margin: 0 8px; padding: 8px 20px; border: none; border-radius: 20px; cursor: pointer; }
-        .call-notification .accept { background: #4caf50; color: white; }
-        .call-notification .reject { background: #f44336; color: white; }
+        .debug-panel { background: #1a1a1a; padding: 8px; margin: 8px; border-radius: 8px; font-size: 10px; color: #888; font-family: monospace; }
+        .call-notification { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1a1a1a; border: 2px solid #4caf50; border-radius: 16px; padding: 16px 24px; z-index: 1001; }
         .call-window { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .video-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; padding: 20px; }
         video { width: 400px; max-width: 45vw; background: #1a1a1a; border-radius: 16px; transform: scaleX(-1); }
@@ -142,6 +137,9 @@
         <div class="chats-list" id="chatsList">
             <div class="no-items">✨ Нет чатов<br>Найдите друга по UID</div>
         </div>
+        <div class="debug-panel" id="debugPanel">
+            🔍 Отладка: ожидание...
+        </div>
     </div>
     <div class="chat-area">
         <div class="chat-header">
@@ -181,7 +179,7 @@
         GoogleAuthProvider,
         signInWithPopup
     } from "firebase/auth";
-    import { getDatabase, ref, set, update, onValue, off, push, onDisconnect } from "firebase/database";
+    import { getDatabase, ref, set, update, onValue, off, onDisconnect, get } from "firebase/database";
     import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, orderBy, query } from "firebase/firestore";
     import { getAnalytics } from "firebase/analytics";
 
@@ -227,10 +225,9 @@
     let peerConnection = null;
     let localStream = null;
     let currentCallId = null;
-    let callType = null; // 'audio' или 'video'
+    let callType = null;
     let callListeners = [];
     
-    // STUN серверы (бесплатные, публичные)
     const configuration = {
         iceServers: [
             { urls: 'stun:stun.l.google.com:19302' },
@@ -264,6 +261,14 @@
             reader.onerror = reject;
             reader.readAsDataURL(file);
         });
+    }
+    
+    function updateDebug(message) {
+        const debugPanel = document.getElementById('debugPanel');
+        if (debugPanel) {
+            const time = new Date().toLocaleTimeString();
+            debugPanel.innerHTML = `🔍 [${time}] ${message}<br>👤 Ваш UID: ${currentUser?.uid?.substring(0, 12)}...`;
+        }
     }
     
     // ==================== HEARTBEAT ====================
@@ -330,9 +335,7 @@
                 const result = await signInWithPopup(auth, googleProvider);
                 const user = result.user;
                 const userRef = ref(rtdb, `users/${user.uid}`);
-                const snapshot = await new Promise((resolve) => {
-                    onValue(userRef, resolve, { onlyOnce: true });
-                });
+                const snapshot = await new Promise((resolve) => { onValue(userRef, resolve, { onlyOnce: true }); });
                 if (!snapshot.exists()) {
                     await set(ref(rtdb, `users/${user.uid}`), {
                         email: user.email,
@@ -416,6 +419,8 @@
         onValue(usersRef, (snapshot) => {
             const users = snapshot.val() || {};
             allUsersList = [];
+            updateDebug(`Загружено пользователей: ${Object.keys(users).length}`);
+            
             for (const [uid, data] of Object.entries(users)) {
                 if (uid !== currentUser.uid) {
                     const isOnline = data.status === 'online' && (Date.now() - (data.lastSeen || 0) < 60000);
@@ -431,8 +436,6 @@
                 document.getElementById('peerStatus').className = isOnline ? 'peer-status connected' : 'peer-status';
                 document.getElementById('callButtons').style.display = isOnline ? 'flex' : 'none';
             }
-            const searchInput = document.getElementById('searchInput');
-            if (searchInput && searchInput.value.trim()) renderSearchResults(searchInput.value);
         });
     }
     
@@ -543,20 +546,44 @@
         container.scrollTop = container.scrollHeight;
     }
     
-    // ==================== ПОИСК ====================
-    async function searchUsers(query, searchType) {
+    // ==================== ПОИСК (ПРЯМОЙ В БАЗЕ) ====================
+    async function searchUsersDirect(query, searchType) {
         if (!query.trim()) return [];
+        
+        updateDebug(`Поиск: "${query}" (тип: ${searchType})`);
         const results = [];
         const searchLower = query.toLowerCase().trim();
-        for (const user of allUsersList) {
-            if (searchType === 'uid' && user.uid.toLowerCase().includes(searchLower)) results.push(user);
-            else if (searchType === 'name' && user.name && user.name.toLowerCase().includes(searchLower)) results.push(user);
+        
+        // Получаем всех пользователей из базы напрямую
+        const usersRef = ref(rtdb, 'users');
+        const snapshot = await get(usersRef);
+        const users = snapshot.val() || {};
+        
+        updateDebug(`Всего пользователей в БД: ${Object.keys(users).length}`);
+        
+        for (const [uid, data] of Object.entries(users)) {
+            if (uid === currentUser.uid) continue;
+            
+            if (searchType === 'uid') {
+                // Точное совпадение или частичное по UID
+                if (uid.toLowerCase() === searchLower || uid.toLowerCase().includes(searchLower)) {
+                    results.push({ uid, name: data.name || 'Без имени', email: data.email, avatarBase64: data.avatarBase64 });
+                    updateDebug(`✅ Найден UID: ${uid.substring(0, 8)}... (${data.name})`);
+                }
+            } else if (searchType === 'name') {
+                if (data.name && data.name.toLowerCase().includes(searchLower)) {
+                    results.push({ uid, name: data.name, email: data.email, avatarBase64: data.avatarBase64 });
+                    updateDebug(`✅ Найден по имени: ${data.name} (${uid.substring(0, 8)}...)`);
+                }
+            }
         }
+        
+        updateDebug(`Результатов поиска: ${results.length}`);
         return results;
     }
     
     async function renderSearchResults(query) {
-        const results = await searchUsers(query, currentSearchType);
+        const results = await searchUsersDirect(query, currentSearchType);
         let container = document.getElementById('searchResults');
         if (!container) {
             container = document.createElement('div');
@@ -564,22 +591,30 @@
             container.className = 'search-results';
             document.querySelector('.search-container').appendChild(container);
         }
+        
         if (!query.trim()) { container.innerHTML = ''; return; }
-        if (results.length === 0) { container.innerHTML = '<div class="search-result-item" style="justify-content:center;color:#666;">❌ Пользователь не найден</div>'; return; }
+        
+        if (results.length === 0) {
+            container.innerHTML = '<div class="search-result-item" style="justify-content:center;color:#666;">❌ Пользователь не найден<br><span style="font-size:10px;">Проверьте правильность UID</span></div>';
+            return;
+        }
+        
         container.innerHTML = results.map(user => `
             <div class="search-result-item" data-user-id="${user.uid}">
                 <div class="avatar" style="width:40px;height:40px;">${user.avatarBase64 ? `<img src="${user.avatarBase64}">` : (user.name ? user.name.charAt(0).toUpperCase() : '?')}</div>
                 <div style="flex:1;">
                     <div><strong>${escapeHtml(user.name || 'Без имени')}</strong></div>
-                    <div style="font-size:10px;color:#888;font-family:monospace;">UID: ${user.uid.substring(0, 8)}...</div>
+                    <div style="font-size:10px;color:#888;font-family:monospace;">UID: ${user.uid.substring(0, 10)}...</div>
+                    <div style="font-size:9px;color:#666;">${user.email || ''}</div>
                 </div>
-                <button style="background:#4caf50;border:none;padding:6px 12px;border-radius:20px;cursor:pointer;">➕</button>
+                <button style="background:#4caf50;border:none;padding:6px 12px;border-radius:20px;cursor:pointer;">➕ Написать</button>
             </div>
         `).join('');
+        
         document.querySelectorAll('.search-result-item').forEach(el => {
             el.onclick = async () => {
                 const peerId = el.dataset.userId;
-                const peerInfo = usersCache.get(peerId);
+                const peerInfo = usersCache.get(peerId) || { name: 'Пользователь', avatarBase64: null };
                 const chatId = await createOrGetChat(peerId);
                 await loadUserChats();
                 openChat(chatId, peerId, peerInfo?.name || 'Пользователь', peerInfo?.avatarBase64);
@@ -604,6 +639,7 @@
                 </div>
                 <div class="chat-details">
                     <div class="chat-name">${escapeHtml(chat.peerName || 'Пользователь')}</div>
+                    <div style="font-size:9px;color:#666;font-family:monospace;">${chat.peerId.substring(0, 10)}...</div>
                     <div class="chat-last-msg">${escapeHtml(chat.lastMessage || 'Новый чат')}</div>
                 </div>
             `;
@@ -634,7 +670,7 @@
                     <div class="avatar-preview" id="avatarPreview">${currentUserData.avatarBase64 ? `<img src="${currentUserData.avatarBase64}">` : `<span style="font-size:48px;">${currentUserData.name?.charAt(0).toUpperCase() || 'W'}</span>`}</div>
                     <label class="file-input-label">📸 Загрузить фото<input type="file" id="avatarUpload" accept="image/*" style="display:none;"></label>
                 </div>
-                <div class="my-id-display"><strong>🆔 Ваш UID:</strong><br><span id="userUid" style="user-select:all;cursor:pointer;">${currentUser.uid}</span><button id="copyUidBtn" style="margin-top:8px;padding:6px;font-size:12px;">📋 Копировать</button></div>
+                <div class="my-id-display"><strong>🆔 Ваш UID:</strong><br><span style="font-family:monospace;font-size:11px;word-break:break-all;">${currentUser.uid}</span><button id="copyUidBtn" style="margin-top:8px;padding:6px;font-size:12px;">📋 Копировать</button></div>
                 <button id="saveProfileBtn">💾 Сохранить</button>
                 <button id="logoutBtn" class="danger">🚪 Выйти</button>
                 <button id="closeProfileBtn" class="secondary">Закрыть</button>
@@ -687,15 +723,14 @@
             
             peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
-                    saveIceCandidate(event.candidate);
+                    const candidatesRef = ref(rtdb, `calls/${currentCallId}/iceCandidates/${Date.now()}`);
+                    set(candidatesRef, { candidate: event.candidate.candidate, sdpMid: event.candidate.sdpMid, sdpMLineIndex: event.candidate.sdpMLineIndex });
                 }
             };
             
             peerConnection.ontrack = (event) => {
                 const remoteVideo = document.getElementById('remoteVideo');
-                if (remoteVideo && event.streams[0]) {
-                    remoteVideo.srcObject = event.streams[0];
-                }
+                if (remoteVideo && event.streams[0]) remoteVideo.srcObject = event.streams[0];
             };
             
             const offer = await peerConnection.createOffer();
@@ -740,12 +775,6 @@
         callListeners.push(listener);
     }
     
-    async function saveIceCandidate(candidate) {
-        if (!currentCallId) return;
-        const candidatesRef = ref(rtdb, `calls/${currentCallId}/iceCandidates/${Date.now()}`);
-        await set(candidatesRef, { candidate: candidate.candidate, sdpMid: candidate.sdpMid, sdpMLineIndex: candidate.sdpMLineIndex });
-    }
-    
     function listenForIncomingCalls() {
         const callsRef = ref(rtdb, 'calls');
         onValue(callsRef, (snapshot) => {
@@ -764,10 +793,10 @@
         const notification = document.createElement('div');
         notification.className = 'call-notification';
         notification.innerHTML = `
-            <div>📞 ${call.type === 'video' ? 'Видеозвонок' : 'Аудиозвонок'} от ${call.from.substring(0, 8)}...</div>
+            <div>📞 ${call.type === 'video' ? 'Видеозвонок' : 'Аудиозвонок'}</div>
             <div style="margin-top: 10px;">
-                <button class="accept" data-call-id="${callId}">Принять</button>
-                <button class="reject" data-call-id="${callId}">Отклонить</button>
+                <button class="accept">✅ Принять</button>
+                <button class="reject">❌ Отклонить</button>
             </div>
         `;
         document.body.appendChild(notification);
@@ -796,7 +825,10 @@
             localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
             
             peerConnection.onicecandidate = (event) => {
-                if (event.candidate) saveIceCandidate(event.candidate);
+                if (event.candidate) {
+                    const candidatesRef = ref(rtdb, `calls/${currentCallId}/iceCandidates/${Date.now()}`);
+                    set(candidatesRef, { candidate: event.candidate.candidate, sdpMid: event.candidate.sdpMid, sdpMLineIndex: event.candidate.sdpMLineIndex });
+                }
             };
             
             peerConnection.ontrack = (event) => {
@@ -810,22 +842,19 @@
             
             await update(ref(rtdb, `calls/${callId}`), { status: 'answered', answer: { type: answer.type, sdp: answer.sdp } });
             
-            listenForIceCandidates(callId);
+            // Слушаем ICE кандидаты
+            const candidatesRef = ref(rtdb, `calls/${callId}/iceCandidates`);
+            onValue(candidatesRef, (snapshot) => {
+                const candidates = snapshot.val();
+                if (candidates && peerConnection) {
+                    for (const [key, cand] of Object.entries(candidates)) {
+                        peerConnection.addIceCandidate(new RTCIceCandidate(cand));
+                    }
+                }
+            });
         } catch (err) {
             console.error("Accept call error:", err);
         }
-    }
-    
-    function listenForIceCandidates(callId) {
-        const candidatesRef = ref(rtdb, `calls/${callId}/iceCandidates`);
-        onValue(candidatesRef, (snapshot) => {
-            const candidates = snapshot.val();
-            if (candidates && peerConnection) {
-                for (const [key, cand] of Object.entries(candidates)) {
-                    peerConnection.addIceCandidate(new RTCIceCandidate(cand));
-                }
-            }
-        });
     }
     
     function createCallWindow(isVideo) {
@@ -891,7 +920,7 @@
         await loadUserChats();
         
         const searchInput = document.getElementById('searchInput');
-        searchInput.placeholder = "🔍 Поиск по UID (вставьте UID друга)";
+        searchInput.placeholder = "🔍 Введите UID друга (полностью или частично)";
         searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
         document.getElementById('searchBtn').onclick = () => renderSearchResults(searchInput.value);
         
@@ -900,13 +929,15 @@
                 document.querySelectorAll('.search-type-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 currentSearchType = btn.dataset.searchType;
-                searchInput.placeholder = currentSearchType === 'uid' ? "🔍 Поиск по UID" : "👤 Поиск по имени";
+                searchInput.placeholder = currentSearchType === 'uid' ? "🔍 Введите UID друга" : "👤 Введите имя пользователя";
                 renderSearchResults(searchInput.value);
             };
         });
         
         document.getElementById('audioCallBtn').onclick = () => startCall(false);
         document.getElementById('videoCallBtn').onclick = () => startCall(true);
+        
+        updateDebug(`Готов к работе! Ваш UID: ${currentUser.uid.substring(0, 12)}...`);
     }
     
     function bindEvents() {
