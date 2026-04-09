@@ -62,28 +62,24 @@
         .dropdown-menu { position: absolute; right: 0; top: 100%; background: #1a1a1a; border-radius: 8px; overflow: hidden; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
         .dropdown-menu button { display: block; width: 100%; padding: 10px 16px; background: none; border: none; color: white; text-align: left; cursor: pointer; font-size: 13px; }
         .dropdown-menu button:hover { background: #2a2a2a; }
-        .dropdown-menu button.danger { color: #f44336; }
         
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #0a0a0a; }
         .chat-header { padding: 16px 24px; background: #0e0e0e; border-bottom: 1px solid #202020; display: flex; justify-content: space-between; align-items: center; }
         .chat-contact { display: flex; align-items: center; gap: 14px; }
         .peer-status { font-size: 11px; padding: 4px 10px; border-radius: 16px; background: #2a2a2a; margin-top: 4px; text-align: center; }
-        .peer-status.connected { background: #4caf50; }
-        .peer-status.offline { background: #666; }
+        .peer-status.online { background: #4caf50; color: white; }
+        .peer-status.offline { background: #666; color: white; }
         .call-buttons { display: flex; gap: 8px; }
         .call-btn { background: #2a2a2a; border: none; color: white; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 18px; transition: all 0.2s; }
         .call-btn:hover { background: #4caf50; transform: scale(1.05); }
-        .call-btn.ringing { background: #ff9800; animation: ring 1s infinite; }
-        @keyframes ring { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
         
         .messages-area { flex: 1; overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 12px; }
-        .message { max-width: 70%; padding: 10px 16px; border-radius: 22px; animation: fadeIn 0.2s ease; position: relative; }
+        .message { max-width: 70%; padding: 10px 16px; border-radius: 22px; animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: translateY(0);} }
         .message.outgoing { background: #2b6e4c; align-self: flex-end; border-bottom-right-radius: 5px; }
         .message.incoming { background: #202020; align-self: flex-start; border-bottom-left-radius: 5px; }
         .message-text { font-size: 14px; word-wrap: break-word; }
         .message-time { font-size: 10px; color: #aaa; margin-top: 5px; text-align: right; }
-        .message-sender { font-size: 10px; color: #888; margin-bottom: 4px; }
         
         .input-area { padding: 16px 20px; background: #0e0e0e; border-top: 1px solid #202020; display: flex; gap: 14px; }
         .message-input { flex: 1; padding: 12px 18px; background: #1a1a1a; border: 1px solid #2c2c2c; color: white; border-radius: 32px; outline: none; }
@@ -120,7 +116,7 @@
         .call-notification { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1a1a1a; border: 2px solid #4caf50; border-radius: 16px; padding: 16px 24px; z-index: 1001; animation: slideUp 0.3s ease; }
         @keyframes slideUp { from { opacity: 0; transform: translateX(-50%) translateY(50px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
         
-        .create-btn { background: #4caf50; border: none; color: white; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 11px; margin-left: 8px; }
+        .create-btn { background: #4caf50; border: none; color: white; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 11px; }
         
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #0c0c0c; }
@@ -185,7 +181,7 @@
             </div>
             <div class="call-buttons" id="callButtons" style="display: none;">
                 <button class="call-btn" id="audioCallBtn" title="Аудиозвонок">🎤</button>
-                <button class="call-btn" id="videoCallBtn" title="Видеозввонок">📹</button>
+                <button class="call-btn" id="videoCallBtn" title="Видеозвонок">📹</button>
             </div>
         </div>
         <div class="messages-area" id="messagesArea">
@@ -213,7 +209,7 @@
         signInWithPopup
     } from "firebase/auth";
     import { getDatabase, ref, set, update, onValue, off, onDisconnect, get } from "firebase/database";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, orderBy, query as fsQuery, where, getDocs, deleteDoc, arrayUnion, arrayRemove, writeBatch } from "firebase/firestore";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, orderBy, query as fsQuery, where, getDocs, deleteDoc, arrayUnion, arrayRemove } from "firebase/firestore";
     import { getAnalytics } from "firebase/analytics";
 
     const firebaseConfig = {
@@ -237,45 +233,6 @@
     googleProvider.addScope('profile');
     googleProvider.addScope('email');
     
-    // ==================== ЗВУКИ ====================
-    function playSound(type) {
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
-        
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-        
-        if (type === 'message') {
-            oscillator.frequency.value = 880;
-            gainNode.gain.value = 0.3;
-            oscillator.type = 'sine';
-            oscillator.start();
-            gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + 0.5);
-            oscillator.stop(audioContext.currentTime + 0.5);
-        } else if (type === 'call') {
-            oscillator.frequency.value = 440;
-            gainNode.gain.value = 0.4;
-            oscillator.type = 'sine';
-            oscillator.start();
-            setTimeout(() => {
-                oscillator.frequency.value = 880;
-            }, 300);
-            setTimeout(() => {
-                oscillator.stop();
-            }, 600);
-        } else if (type === 'call_end') {
-            oscillator.frequency.value = 440;
-            gainNode.gain.value = 0.3;
-            oscillator.type = 'sine';
-            oscillator.start();
-            setTimeout(() => {
-                gainNode.gain.exponentialRampToValueAtTime(0.00001, audioContext.currentTime + 0.3);
-                oscillator.stop(audioContext.currentTime + 0.3);
-            }, 200);
-        }
-    }
-    
     // ==================== ПЕРЕМЕННЫЕ ====================
     let currentUser = null;
     let currentUserData = null;
@@ -297,7 +254,6 @@
     let unsubscribeGroups = null;
     let unsubscribeChannels = null;
     let currentSearchType = 'uid';
-    let callRingingInterval = null;
     
     // WebRTC
     let peerConnection = null;
@@ -305,7 +261,6 @@
     let currentCallId = null;
     let callType = null;
     let callListeners = [];
-    let isRinging = false;
     
     const configuration = {
         iceServers: [
@@ -316,6 +271,14 @@
             { urls: 'stun:stun4.l.google.com:19302' }
         ]
     };
+    
+    // ==================== ЗВУК ====================
+    function playNotification() {
+        try {
+            const audio = new Audio('data:audio/wav;base64,U3RlYWx0aCBhbmQgV2ViQXVkaW8gYXJlIGNvb2whIFRoaXMgaXMgYSBzaW1wbGUgYmVlcCBzb3VuZC4=');
+            audio.play().catch(e => console.log('Audio play failed'));
+        } catch(e) {}
+    }
     
     // ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])); }
@@ -347,12 +310,16 @@
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         const heartbeatRef = ref(rtdb, `heartbeats/${currentUser.uid}`);
         onDisconnect(heartbeatRef).remove();
-        heartbeatInterval = setInterval(async () => {
+        
+        const updateOnline = async () => {
             try {
                 await set(heartbeatRef, { timestamp: Date.now() });
                 await update(ref(rtdb, `users/${currentUser.uid}`), { status: 'online', lastSeen: Date.now() });
             } catch(err) { console.warn("Heartbeat error:", err); }
-        }, 10000);
+        };
+        
+        updateOnline();
+        heartbeatInterval = setInterval(updateOnline, 8000);
     }
     
     // ==================== АУТЕНТИФИКАЦИЯ ====================
@@ -489,60 +456,28 @@
             const users = snapshot.val() || {};
             for (const [uid, data] of Object.entries(users)) {
                 if (uid !== currentUser.uid) {
-                    const isOnline = data.status === 'online' && (Date.now() - (data.lastSeen || 0) < 60000);
+                    const isOnline = data.status === 'online' && (Date.now() - (data.lastSeen || 0) < 15000);
                     onlineStatuses.set(uid, isOnline);
                     usersCache.set(uid, { name: data.name, email: data.email, avatarBase64: data.avatarBase64, bio: data.bio, uid: uid });
                 }
             }
             renderCurrentList();
+            
+            // Обновляем статус в открытом чате
             if (currentChatType === 'user' && currentChatPeerId) {
                 const isOnline = onlineStatuses.get(currentChatPeerId) || false;
                 const statusEl = document.getElementById('peerStatus');
+                const callBtns = document.getElementById('callButtons');
+                
                 if (statusEl) {
                     statusEl.innerHTML = isOnline ? '🟢 В сети' : '⚪ Не в сети';
-                    statusEl.className = isOnline ? 'peer-status connected' : 'peer-status offline';
+                    statusEl.className = isOnline ? 'peer-status online' : 'peer-status offline';
                 }
-                const callBtns = document.getElementById('callButtons');
-                if (callBtns) callBtns.style.display = isOnline ? 'flex' : 'none';
+                if (callBtns) {
+                    callBtns.style.display = isOnline ? 'flex' : 'none';
+                }
             }
         });
-    }
-    
-    // ==================== УДАЛЕНИЕ ЧАТА ====================
-    async function deleteChat(chatId, type) {
-        if (!confirm('Удалить этот чат?')) return;
-        try {
-            if (type === 'user') {
-                // Удаляем чат из Firestore
-                await deleteDoc(doc(db, 'chats', chatId));
-            } else if (type === 'group') {
-                if (groups.find(g => g.id === chatId)?.creatorId === currentUser.uid) {
-                    await deleteDoc(doc(db, 'groups', chatId));
-                } else {
-                    await leaveGroup(chatId);
-                }
-            } else if (type === 'channel') {
-                if (channels.find(c => c.id === chatId)?.creatorId === currentUser.uid) {
-                    await deleteDoc(doc(db, 'channels', chatId));
-                } else {
-                    await unsubscribeFromChannel(chatId);
-                }
-            }
-            if (currentChatId === chatId) {
-                currentChatId = null;
-                currentChatType = null;
-                document.getElementById('chatName').innerText = 'Ww Мессенджер';
-                document.getElementById('chatAvatar').innerHTML = '✨';
-                document.getElementById('peerStatus').innerHTML = '⚪ Выберите чат';
-                document.getElementById('messageInput').disabled = true;
-                document.getElementById('sendBtn').disabled = true;
-                document.getElementById('callButtons').style.display = 'none';
-                document.getElementById('messagesArea').innerHTML = '<div class="no-items" style="margin-top:60px;">💬 Чат удален</div>';
-            }
-        } catch(err) {
-            console.error("Delete error:", err);
-            alert("Ошибка при удалении: " + err.message);
-        }
     }
     
     // ==================== ЛИЧНЫЕ ЧАТЫ ====================
@@ -704,6 +639,42 @@
         } catch(err) { console.error(err); throw err; }
     }
     
+    async function deleteChat(chatId, type) {
+        if (!confirm('Удалить этот чат?')) return;
+        try {
+            if (type === 'user') {
+                await deleteDoc(doc(db, 'chats', chatId));
+            } else if (type === 'group') {
+                if (groups.find(g => g.id === chatId)?.creatorId === currentUser.uid) {
+                    await deleteDoc(doc(db, 'groups', chatId));
+                } else {
+                    await leaveGroup(chatId);
+                }
+            } else if (type === 'channel') {
+                if (channels.find(c => c.id === chatId)?.creatorId === currentUser.uid) {
+                    await deleteDoc(doc(db, 'channels', chatId));
+                } else {
+                    await unsubscribeFromChannel(chatId);
+                }
+            }
+            if (currentChatId === chatId && currentChatType === type) {
+                currentChatId = null;
+                currentChatType = null;
+                document.getElementById('chatName').innerText = 'Ww Мессенджер';
+                document.getElementById('chatAvatar').innerHTML = '✨';
+                document.getElementById('peerStatus').innerHTML = '⚪ Выберите чат';
+                document.getElementById('peerStatus').className = 'peer-status';
+                document.getElementById('messageInput').disabled = true;
+                document.getElementById('sendBtn').disabled = true;
+                document.getElementById('callButtons').style.display = 'none';
+                document.getElementById('messagesArea').innerHTML = '<div class="no-items" style="margin-top:60px;">💬 Чат удален</div>';
+            }
+        } catch(err) {
+            console.error("Delete error:", err);
+            alert("Ошибка при удалении: " + err.message);
+        }
+    }
+    
     // ==================== ОТПРАВКА СООБЩЕНИЙ ====================
     async function sendMessage() {
         const input = document.getElementById('messageInput');
@@ -750,9 +721,15 @@
             currentChatPeerId = id;
             const isOnline = onlineStatuses.get(id) || false;
             const statusEl = document.getElementById('peerStatus');
-            statusEl.innerHTML = isOnline ? '🟢 В сети' : '⚪ Не в сети';
-            statusEl.className = isOnline ? 'peer-status connected' : 'peer-status offline';
-            document.getElementById('callButtons').style.display = isOnline ? 'flex' : 'none';
+            const callBtns = document.getElementById('callButtons');
+            
+            if (statusEl) {
+                statusEl.innerHTML = isOnline ? '🟢 В сети' : '⚪ Не в сети';
+                statusEl.className = isOnline ? 'peer-status online' : 'peer-status offline';
+            }
+            if (callBtns) {
+                callBtns.style.display = isOnline ? 'flex' : 'none';
+            }
         } else if (type === 'group') {
             collectionPath = `groups/${id}/messages`;
             document.getElementById('peerStatus').innerHTML = '👥 Группа';
@@ -771,11 +748,6 @@
             const msgs = []; 
             snapshot.forEach(doc => msgs.push(doc.data()));
             renderMessages(msgs);
-            // Звук только для входящих сообщений не от себя
-            const lastMsg = msgs[msgs.length - 1];
-            if (lastMsg && lastMsg.senderId !== currentUser.uid && !document.hasFocus()) {
-                playSound('message');
-            }
         });
         
         if (typingRef) off(typingRef);
@@ -811,11 +783,7 @@
             const isOutgoing = msg.senderId === currentUser.uid;
             const msgDiv = document.createElement('div');
             msgDiv.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
-            let senderHtml = '';
-            if (!isOutgoing && currentChatType !== 'user') {
-                senderHtml = `<div class="message-sender">${escapeHtml(msg.senderName)}</div>`;
-            }
-            msgDiv.innerHTML = `${senderHtml}<div class="message-text">${escapeHtml(msg.text)}</div><div class="message-time">${msg.time}</div>`;
+            msgDiv.innerHTML = `<div class="message-text">${escapeHtml(msg.text)}</div><div class="message-time">${msg.time}</div>`;
             container.appendChild(msgDiv);
         });
         container.scrollTop = container.scrollHeight;
@@ -869,9 +837,7 @@
                 if (existingMenu) existingMenu.remove();
                 const menu = document.createElement('div');
                 menu.className = 'dropdown-menu';
-                menu.innerHTML = `
-                    <button class="delete-chat" data-id="${id}" data-type="${type}">🗑️ Удалить чат</button>
-                `;
+                menu.innerHTML = `<button class="delete-chat" data-id="${id}" data-type="${type}">🗑️ Удалить чат</button>`;
                 btn.parentElement.appendChild(menu);
                 menu.querySelector('.delete-chat').onclick = async (e2) => {
                     e2.stopPropagation();
@@ -880,7 +846,7 @@
                 };
                 setTimeout(() => {
                     document.addEventListener('click', function removeMenu() {
-                        menu.remove();
+                        if (menu.parentNode) menu.remove();
                         document.removeEventListener('click', removeMenu);
                     }, { once: true });
                 }, 100);
@@ -1114,7 +1080,10 @@
     
     // ==================== WEBRTC ЗВОНКИ ====================
     async function startCall(isVideo) {
-        if (!currentChatPeerId || currentChatType !== 'user') return;
+        if (!currentChatPeerId || currentChatType !== 'user') {
+            alert("Звонки доступны только в личных чатах");
+            return;
+        }
         if (currentCallId) {
             alert("Уже есть активный звонок");
             return;
@@ -1158,7 +1127,6 @@
                 timestamp: Date.now()
             });
             
-            playSound('call');
             listenForCallResponse();
         } catch(err) {
             console.error("Start call error:", err);
@@ -1178,13 +1146,10 @@
                 off(listener);
                 if (peerConnection) {
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-                    playSound('call_end');
                 }
-                if (callRingingInterval) clearInterval(callRingingInterval);
             } else if (data.status === 'rejected') {
                 off(listener);
                 endCall();
-                playSound('call_end');
                 alert("Звонок отклонен");
             } else if (data.status === 'ended') {
                 off(listener);
@@ -1201,7 +1166,7 @@
             if (!calls) return;
             
             for (const [callId, call] of Object.entries(calls)) {
-                if (call.to === currentUser.uid && call.status === 'waiting' && !currentCallId && !isRinging) {
+                if (call.to === currentUser.uid && call.status === 'waiting' && !currentCallId) {
                     showIncomingCallNotification(callId, call);
                 }
             }
@@ -1209,10 +1174,6 @@
     }
     
     function showIncomingCallNotification(callId, call) {
-        isRinging = true;
-        playSound('call');
-        callRingingInterval = setInterval(() => playSound('call'), 2000);
-        
         const notification = document.createElement('div');
         notification.className = 'call-notification';
         notification.innerHTML = `
@@ -1226,24 +1187,15 @@
         
         notification.querySelector('.accept').onclick = async () => {
             notification.remove();
-            if (callRingingInterval) clearInterval(callRingingInterval);
-            isRinging = false;
             await acceptCall(callId, call);
         };
         notification.querySelector('.reject').onclick = async () => {
             notification.remove();
-            if (callRingingInterval) clearInterval(callRingingInterval);
-            isRinging = false;
             await update(ref(rtdb, `calls/${callId}`), { status: 'rejected' });
         };
         
         setTimeout(() => {
-            if (notification.parentNode) {
-                notification.remove();
-                isRinging = false;
-                if (callRingingInterval) clearInterval(callRingingInterval);
-                update(ref(rtdb, `calls/${callId}`), { status: 'ended' });
-            }
+            if (notification.parentNode) notification.remove();
         }, 30000);
     }
     
@@ -1309,7 +1261,10 @@
             <div class="call-controls"><button id="endCallBtn" class="end-call">🔴 Завершить</button></div>
         `;
         document.body.appendChild(window);
-        if (isVideo && localStream) document.getElementById('localVideo').srcObject = localStream;
+        if (isVideo && localStream) {
+            const localVideo = document.getElementById('localVideo');
+            if (localVideo) localVideo.srcObject = localStream;
+        }
         document.getElementById('endCallBtn').onclick = () => endCall();
     }
     
@@ -1328,8 +1283,6 @@
         currentCallId = null;
         callListeners.forEach(listener => off(listener));
         callListeners = [];
-        if (callRingingInterval) clearInterval(callRingingInterval);
-        isRinging = false;
     }
     
     // ==================== ИНИЦИАЛИЗАЦИЯ ====================
