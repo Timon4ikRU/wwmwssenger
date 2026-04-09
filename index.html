@@ -262,6 +262,7 @@
     let callType = null;
     let callListeners = [];
     let ringingInterval = null;
+    let callListenerRef = null;
     
     const configuration = {
         iceServers: [
@@ -300,8 +301,6 @@
     
     function playRingSound() {
         try {
-            const audio = new Audio();
-            // Простой beep через Web Audio
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             const ctx = new AudioContext();
             const oscillator = ctx.createOscillator();
@@ -311,9 +310,9 @@
             oscillator.frequency.value = 440;
             gain.gain.value = 0.3;
             oscillator.start();
-            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 1);
-            oscillator.stop(ctx.currentTime + 1);
-        } catch(e) {}
+            gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.8);
+            oscillator.stop(ctx.currentTime + 0.8);
+        } catch(e) { console.log("Audio error:", e); }
     }
     
     // ==================== HEARTBEAT ====================
@@ -718,11 +717,14 @@
         currentChatType = type;
         currentChatPeerName = name;
         
-        if (type === 'user' && peerId) {
-            currentChatPeerId = peerId;
-        } else if (type === 'user' && !peerId) {
-            const chat = chats.find(c => c.id === id);
-            if (chat) currentChatPeerId = chat.peerId;
+        if (type === 'user') {
+            if (peerId) {
+                currentChatPeerId = peerId;
+            } else {
+                const chat = chats.find(c => c.id === id);
+                if (chat) currentChatPeerId = chat.peerId;
+            }
+            console.log("📞 Открыт чат с peerId:", currentChatPeerId);
         }
         
         document.getElementById('chatName').innerText = name;
@@ -1141,6 +1143,7 @@
             });
             
             listenForCallResponse();
+            console.log("📞 Звонок отправлен пользователю:", currentChatPeerId);
         } catch(err) {
             console.error("Start call error:", err);
             alert("Не удалось получить доступ к микрофону/камере");
@@ -1151,6 +1154,7 @@
     
     function listenForCallResponse() {
         const callRef = ref(rtdb, `calls/${currentCallId}`);
+        callListenerRef = callRef;
         const listener = onValue(callRef, async (snapshot) => {
             const data = snapshot.val();
             if (!data) return;
@@ -1180,6 +1184,7 @@
             
             for (const [callId, call] of Object.entries(calls)) {
                 if (call.to === currentUser.uid && call.status === 'waiting' && !currentCallId) {
+                    console.log("📞 Входящий звонок от:", call.from);
                     showIncomingCallNotification(callId, call);
                 }
             }
@@ -1303,8 +1308,13 @@
         peerConnection = null;
         localStream = null;
         currentCallId = null;
-        callListeners.forEach(listener => off(listener));
+        
+        // Безопасно отключаем все слушатели
+        callListeners.forEach(listener => {
+            try { off(listener); } catch(e) {}
+        });
         callListeners = [];
+        
         if (ringingInterval) clearInterval(ringingInterval);
     }
     
