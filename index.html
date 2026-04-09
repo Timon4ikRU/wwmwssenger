@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Ww - Мессенджер с звонками</title>
+    <title>Ww - Мессенджер</title>
     <script type="importmap">
         {
             "imports": {
@@ -17,26 +17,16 @@
     </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background: #000;
-            color: #fff;
-            height: 100vh;
-            overflow: hidden;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #000; color: #fff; height: 100vh; overflow: hidden; }
         .app { display: flex; height: 100vh; width: 100%; }
         .sidebar { width: 320px; background: #0c0c0c; border-right: 1px solid #1f1f1f; display: flex; flex-direction: column; }
         .sidebar-header { padding: 16px 20px; background: #050505; border-bottom: 1px solid #1f1f1f; display: flex; justify-content: space-between; align-items: center; }
         .logo span { background: #fff; color: #000; padding: 4px 14px; border-radius: 20px; font-size: 26px; font-weight: 900; }
         .connection-status { font-size: 11px; padding: 4px 10px; border-radius: 20px; background: #2a2a2a; }
         .connection-status.online { background: #4caf50; }
-        .search-container { padding: 12px 16px; border-bottom: 1px solid #1f1f1f; display: flex; flex-direction: column; gap: 8px; }
-        .search-input-wrapper { display: flex; gap: 8px; }
+        .search-container { padding: 12px 16px; border-bottom: 1px solid #1f1f1f; display: flex; gap: 8px; }
         .search-input { flex: 1; padding: 10px 16px; background: #1a1a1a; border: 1px solid #2c2c2c; color: white; border-radius: 24px; outline: none; font-size: 14px; }
         .search-btn { background: #4caf50; border: none; color: white; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 20px; }
-        .search-type { display: flex; gap: 8px; margin-top: 5px; }
-        .search-type-btn { flex: 1; padding: 6px; background: #1a1a1a; border: 1px solid #2c2c2c; color: #888; border-radius: 20px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
-        .search-type-btn.active { background: #4caf50; color: white; border-color: #4caf50; }
         .user-profile { padding: 16px 20px; display: flex; align-items: center; gap: 14px; background: #080808; border-bottom: 1px solid #1f1f1f; cursor: pointer; }
         .avatar { width: 52px; height: 52px; border-radius: 50%; background: #202020; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: bold; overflow: hidden; flex-shrink: 0; position: relative; }
         .avatar img { width: 100%; height: 100%; object-fit: cover; }
@@ -46,7 +36,7 @@
         .user-bio { font-size: 11px; color: #888; margin-top: 2px; }
         .user-email { font-size: 10px; color: #666; margin-top: 2px; }
         .chats-list { flex: 1; overflow-y: auto; }
-        .chat-item { padding: 14px 20px; display: flex; align-items: center; gap: 14px; cursor: pointer; border-bottom: 1px solid #151515; }
+        .chat-item { padding: 14px 20px; display: flex; align-items: center; gap: 14px; cursor: pointer; border-bottom: 1px solid #151515; transition: background 0.2s; }
         .chat-item:hover { background: #141414; }
         .chat-item.active { background: #1e2a1e; border-left: 3px solid #4caf50; }
         .chat-avatar { width: 48px; height: 48px; border-radius: 50%; background: #202020; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: bold; overflow: hidden; position: relative; flex-shrink: 0; }
@@ -58,9 +48,6 @@
         .chat-contact { display: flex; align-items: center; gap: 14px; }
         .peer-status { font-size: 11px; padding: 4px 10px; border-radius: 16px; background: #2a2a2a; margin-top: 4px; text-align: center; }
         .peer-status.connected { background: #4caf50; }
-        .call-buttons { display: flex; gap: 8px; }
-        .call-btn { background: #2a2a2a; border: none; color: white; width: 40px; height: 40px; border-radius: 50%; cursor: pointer; font-size: 18px; transition: all 0.2s; }
-        .call-btn:hover { background: #4caf50; transform: scale(1.05); }
         .messages-area { flex: 1; overflow-y: auto; padding: 24px 20px; display: flex; flex-direction: column; gap: 12px; }
         .message { max-width: 70%; padding: 10px 16px; border-radius: 22px; animation: fadeIn 0.2s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px);} to { opacity: 1; transform: translateY(0);} }
@@ -76,7 +63,7 @@
         .modal-content h2 { margin-bottom: 20px; font-size: 24px; text-align: center; }
         .modal-content input, .modal-content textarea { width: 100%; padding: 14px; margin: 10px 0; background: #1a1a1a; border: 1px solid #2c2c2c; color: white; border-radius: 18px; font-size: 14px; }
         .modal-content button { width: 100%; padding: 14px; margin-top: 16px; background: #4caf50; border: none; color: white; border-radius: 30px; cursor: pointer; font-size: 16px; font-weight: 600; transition: all 0.2s; }
-        .modal-content button:hover { opacity: 0.9; }
+        .modal-content button:hover { opacity: 0.9; transform: translateY(-1px); }
         .modal-content button.secondary { background: #3a3a3a; }
         .modal-content button.danger { background: #c42e2e; }
         .google-btn { background: #fff; color: #000; display: flex; align-items: center; justify-content: center; gap: 10px; }
@@ -95,14 +82,6 @@
         .search-results { background: #1a1a1a; border-radius: 12px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
         .search-result-item { padding: 10px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-bottom: 1px solid #2c2c2c; transition: background 0.2s; }
         .search-result-item:hover { background: #2a2a2a; }
-        .debug-panel { background: #1a1a1a; padding: 8px; margin: 8px; border-radius: 8px; font-size: 10px; color: #888; font-family: monospace; }
-        .call-notification { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: #1a1a1a; border: 2px solid #4caf50; border-radius: 16px; padding: 16px 24px; z-index: 1001; }
-        .call-window { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-        .video-container { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; padding: 20px; }
-        video { width: 400px; max-width: 45vw; background: #1a1a1a; border-radius: 16px; transform: scaleX(-1); }
-        .call-controls { margin-top: 20px; display: flex; gap: 16px; }
-        .call-controls button { padding: 12px 24px; border: none; border-radius: 30px; font-size: 16px; cursor: pointer; background: #2a2a2a; color: white; }
-        .call-controls button.end-call { background: #f44336; }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #0c0c0c; }
         ::-webkit-scrollbar-thumb { background: #4caf50; border-radius: 10px; }
@@ -117,12 +96,8 @@
         </div>
         <div class="search-container">
             <div class="search-input-wrapper">
-                <input type="text" class="search-input" id="searchInput" placeholder="🔍 Поиск по UID...">
+                <input type="text" class="search-input" id="searchInput" placeholder="🔍 Введите UID друга...">
                 <button class="search-btn" id="searchBtn">🔍</button>
-            </div>
-            <div class="search-type">
-                <button class="search-type-btn active" data-search-type="uid">🔑 По UID</button>
-                <button class="search-type-btn" data-search-type="name">👤 По имени</button>
             </div>
             <div id="searchResults"></div>
         </div>
@@ -137,9 +112,6 @@
         <div class="chats-list" id="chatsList">
             <div class="no-items">✨ Нет чатов<br>Найдите друга по UID</div>
         </div>
-        <div class="debug-panel" id="debugPanel">
-            🔍 Отладка: ожидание...
-        </div>
     </div>
     <div class="chat-area">
         <div class="chat-header">
@@ -149,10 +121,6 @@
                     <div class="chat-name" id="chatName">Ww Мессенджер</div>
                     <div class="peer-status" id="peerStatus">⚪ Выберите чат</div>
                 </div>
-            </div>
-            <div class="call-buttons" id="callButtons" style="display: none;">
-                <button class="call-btn" id="audioCallBtn" title="Аудиозвонок">🎤</button>
-                <button class="call-btn" id="videoCallBtn" title="Видеозвонок">📹</button>
             </div>
         </div>
         <div class="messages-area" id="messagesArea">
@@ -180,7 +148,7 @@
         signInWithPopup
     } from "firebase/auth";
     import { getDatabase, ref, set, update, onValue, off, onDisconnect, get } from "firebase/database";
-    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, orderBy, query } from "firebase/firestore";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, orderBy, query as fsQuery, where } from "firebase/firestore";
     import { getAnalytics } from "firebase/analytics";
 
     const firebaseConfig = {
@@ -218,25 +186,7 @@
     let presenceInterval = null;
     let heartbeatInterval = null;
     let unsubscribeMessages = null;
-    let currentSearchType = 'uid';
-    let allUsersList = [];
-    
-    // WebRTC переменные
-    let peerConnection = null;
-    let localStream = null;
-    let currentCallId = null;
-    let callType = null;
-    let callListeners = [];
-    
-    const configuration = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' }
-        ]
-    };
+    let unsubscribeChats = null;
     
     // ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])); }
@@ -261,14 +211,6 @@
             reader.onerror = reject;
             reader.readAsDataURL(file);
         });
-    }
-    
-    function updateDebug(message) {
-        const debugPanel = document.getElementById('debugPanel');
-        if (debugPanel) {
-            const time = new Date().toLocaleTimeString();
-            debugPanel.innerHTML = `🔍 [${time}] ${message}<br>👤 Ваш UID: ${currentUser?.uid?.substring(0, 12)}...`;
-        }
     }
     
     // ==================== HEARTBEAT ====================
@@ -415,18 +357,15 @@
         presenceInterval = setInterval(() => updateStatus('online'), 30000);
         window.addEventListener('beforeunload', () => updateStatus('offline'));
         
+        // Слушаем статусы пользователей
         const usersRef = ref(rtdb, 'users');
         onValue(usersRef, (snapshot) => {
             const users = snapshot.val() || {};
-            allUsersList = [];
-            updateDebug(`Загружено пользователей: ${Object.keys(users).length}`);
-            
             for (const [uid, data] of Object.entries(users)) {
                 if (uid !== currentUser.uid) {
                     const isOnline = data.status === 'online' && (Date.now() - (data.lastSeen || 0) < 60000);
                     onlineStatuses.set(uid, isOnline);
                     usersCache.set(uid, { name: data.name, email: data.email, avatarBase64: data.avatarBase64, bio: data.bio, uid: uid });
-                    allUsersList.push({ uid: uid, name: data.name, email: data.email, avatarBase64: data.avatarBase64 });
                 }
             }
             renderChatsList();
@@ -434,60 +373,106 @@
                 const isOnline = onlineStatuses.get(currentChatPeerId) || false;
                 document.getElementById('peerStatus').innerHTML = isOnline ? '🟢 В сети' : '⚪ Не в сети';
                 document.getElementById('peerStatus').className = isOnline ? 'peer-status connected' : 'peer-status';
-                document.getElementById('callButtons').style.display = isOnline ? 'flex' : 'none';
             }
         });
     }
     
-    async function loadUserChats() {
-        const userChatsRef = doc(db, 'users', currentUser.uid);
-        const docSnap = await getDoc(userChatsRef);
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            const chatIds = Object.values(data);
+    // ==================== ЧАТЫ FIRESTORE (С РЕАЛЬНЫМ ВРЕМЕНЕМ) ====================
+    function subscribeToChats() {
+        if (unsubscribeChats) unsubscribeChats();
+        
+        // Ищем все чаты, где пользователь участник
+        const q = fsQuery(collection(db, 'chats'), where('participants', 'array-contains', currentUser.uid));
+        
+        unsubscribeChats = onSnapshot(q, async (snapshot) => {
             chats = [];
-            for (const chatId of chatIds) {
-                const chatDoc = await getDoc(doc(db, 'chats', chatId));
-                if (chatDoc.exists()) {
-                    const chatData = chatDoc.data();
-                    const peerId = chatData.participants.find(p => p !== currentUser.uid);
-                    const peerInfo = usersCache.get(peerId) || { name: 'Загрузка...', email: '', uid: peerId };
-                    chats.push({
-                        chatId: chatId, peerId: peerId, peerName: peerInfo.name, peerEmail: peerInfo.email,
-                        peerAvatar: peerInfo.avatarBase64, lastMessage: chatData.lastMessage || '', lastTime: chatData.lastTime || 0
-                    });
-                }
+            for (const docSnap of snapshot.docs) {
+                const chatData = docSnap.data();
+                const peerId = chatData.participants.find(p => p !== currentUser.uid);
+                const peerInfo = usersCache.get(peerId) || await loadUserInfo(peerId);
+                
+                chats.push({
+                    chatId: docSnap.id,
+                    peerId: peerId,
+                    peerName: peerInfo?.name || 'Загрузка...',
+                    peerEmail: peerInfo?.email || '',
+                    peerAvatar: peerInfo?.avatarBase64 || null,
+                    lastMessage: chatData.lastMessage || '',
+                    lastTime: chatData.lastTime || 0
+                });
             }
             chats.sort((a,b) => (b.lastTime || 0) - (a.lastTime || 0));
+            renderChatsList();
+        }, (error) => {
+            console.error("Chats subscription error:", error);
+        });
+    }
+    
+    async function loadUserInfo(uid) {
+        try {
+            const userRef = ref(rtdb, `users/${uid}`);
+            const snapshot = await get(userRef);
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                usersCache.set(uid, data);
+                return data;
+            }
+        } catch(err) {
+            console.warn("Error loading user info:", err);
         }
-        renderChatsList();
+        return null;
     }
     
     async function createOrGetChat(peerId) {
-        const userChatsRef = doc(db, 'users', currentUser.uid);
-        const userDoc = await getDoc(userChatsRef);
-        if (userDoc.exists()) {
-            const data = userDoc.data();
-            for (const [key, chatId] of Object.entries(data)) {
-                const chatDoc = await getDoc(doc(db, 'chats', chatId));
-                if (chatDoc.exists() && chatDoc.data().participants.includes(peerId)) return chatId;
+        try {
+            // Проверяем существующий чат через Firestore
+            const q = fsQuery(collection(db, 'chats'), where('participants', 'array-contains', currentUser.uid));
+            const snapshot = await getDocs(q);
+            
+            for (const docSnap of snapshot.docs) {
+                const participants = docSnap.data().participants;
+                if (participants.includes(peerId)) {
+                    return docSnap.id;
+                }
             }
+            
+            // Создаем новый чат
+            const chatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
+            await setDoc(doc(db, 'chats', chatId), {
+                participants: [currentUser.uid, peerId],
+                createdAt: Date.now(),
+                lastMessage: '',
+                lastTime: 0
+            });
+            
+            return chatId;
+        } catch(err) {
+            console.error("Create chat error:", err);
+            throw err;
         }
-        const chatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
-        await setDoc(doc(db, 'chats', chatId), { participants: [currentUser.uid, peerId], createdAt: Date.now(), lastMessage: '', lastTime: 0 });
-        await setDoc(userChatsRef, { [peerId]: chatId }, { merge: true });
-        await setDoc(doc(db, 'users', peerId), { [currentUser.uid]: chatId }, { merge: true });
-        return chatId;
     }
     
     async function sendMessage() {
         const input = document.getElementById('messageInput');
         const text = input.value.trim();
         if (!text || !currentChatId) return;
-        const message = { text: text, senderId: currentUser.uid, senderName: currentUserData.name, timestamp: Date.now(), time: new Date().toLocaleTimeString().slice(0,5) };
-        await addDoc(collection(db, 'chats', currentChatId, 'messages'), message);
-        await updateDoc(doc(db, 'chats', currentChatId), { lastMessage: text, lastTime: Date.now() });
-        input.value = '';
+        
+        const message = {
+            text: text,
+            senderId: currentUser.uid,
+            senderName: currentUserData.name,
+            timestamp: Date.now(),
+            time: new Date().toLocaleTimeString().slice(0,5)
+        };
+        
+        try {
+            await addDoc(collection(db, 'chats', currentChatId, 'messages'), message);
+            await updateDoc(doc(db, 'chats', currentChatId), { lastMessage: text, lastTime: Date.now() });
+            input.value = '';
+        } catch(err) {
+            console.error("Send message error:", err);
+            alert("Ошибка отправки: " + err.message);
+        }
     }
     
     function openChat(chatId, peerId, peerName, peerAvatar) {
@@ -497,21 +482,26 @@
         currentChatPeerName = peerName;
         
         document.getElementById('chatName').innerText = peerName;
-        document.getElementById('chatAvatar').innerHTML = peerAvatar ? `<img src="${peerAvatar}">` : peerName.charAt(0).toUpperCase();
+        document.getElementById('chatAvatar').innerHTML = peerAvatar ? `<img src="${peerAvatar}">` : (peerName?.charAt(0).toUpperCase() || '?');
+        
         const isOnline = onlineStatuses.get(peerId) || false;
         document.getElementById('peerStatus').innerHTML = isOnline ? '🟢 В сети' : '⚪ Не в сети';
         document.getElementById('peerStatus').className = isOnline ? 'peer-status connected' : 'peer-status';
-        document.getElementById('callButtons').style.display = isOnline ? 'flex' : 'none';
         document.getElementById('messageInput').disabled = false;
         document.getElementById('sendBtn').disabled = false;
         
+        // Подписываемся на сообщения
         const messagesRef = collection(db, 'chats', chatId, 'messages');
-        const q = query(messagesRef, orderBy('timestamp', 'asc'));
+        const q = fsQuery(messagesRef, orderBy('timestamp', 'asc'));
         unsubscribeMessages = onSnapshot(q, (snapshot) => {
-            const msgs = []; snapshot.forEach(doc => msgs.push(doc.data()));
+            const msgs = [];
+            snapshot.forEach(doc => msgs.push(doc.data()));
             renderMessages(msgs);
+        }, (error) => {
+            console.error("Messages subscription error:", error);
         });
         
+        // Печатает...
         if (typingRef) off(typingRef);
         typingRef = ref(rtdb, `typing/${chatId}/${peerId}`);
         onValue(typingRef, (snapshot) => {
@@ -521,6 +511,7 @@
                 setTimeout(() => document.getElementById('typingIndicator').style.display = 'none', 2000);
             }
         });
+        
         renderChatsList();
     }
     
@@ -534,7 +525,10 @@
     
     function renderMessages(msgs) {
         const container = document.getElementById('messagesArea');
-        if (msgs.length === 0) { container.innerHTML = '<div class="no-items" style="margin-top:60px;">💬 Напишите первое сообщение!</div>'; return; }
+        if (msgs.length === 0) {
+            container.innerHTML = '<div class="no-items" style="margin-top:60px;">💬 Напишите первое сообщение!</div>';
+            return;
+        }
         container.innerHTML = '';
         msgs.forEach(msg => {
             const isOutgoing = msg.senderId === currentUser.uid;
@@ -546,87 +540,62 @@
         container.scrollTop = container.scrollHeight;
     }
     
-    // ==================== ПОИСК (ПРЯМОЙ В БАЗЕ) ====================
-    async function searchUsersDirect(query, searchType) {
-        if (!query.trim()) return [];
-        
-        updateDebug(`Поиск: "${query}" (тип: ${searchType})`);
-        const results = [];
-        const searchLower = query.toLowerCase().trim();
-        
-        // Получаем всех пользователей из базы напрямую
-        const usersRef = ref(rtdb, 'users');
-        const snapshot = await get(usersRef);
-        const users = snapshot.val() || {};
-        
-        updateDebug(`Всего пользователей в БД: ${Object.keys(users).length}`);
-        
-        for (const [uid, data] of Object.entries(users)) {
-            if (uid === currentUser.uid) continue;
-            
-            if (searchType === 'uid') {
-                // Точное совпадение или частичное по UID
-                if (uid.toLowerCase() === searchLower || uid.toLowerCase().includes(searchLower)) {
-                    results.push({ uid, name: data.name || 'Без имени', email: data.email, avatarBase64: data.avatarBase64 });
-                    updateDebug(`✅ Найден UID: ${uid.substring(0, 8)}... (${data.name})`);
-                }
-            } else if (searchType === 'name') {
-                if (data.name && data.name.toLowerCase().includes(searchLower)) {
-                    results.push({ uid, name: data.name, email: data.email, avatarBase64: data.avatarBase64 });
-                    updateDebug(`✅ Найден по имени: ${data.name} (${uid.substring(0, 8)}...)`);
-                }
+    // ==================== ПОИСК ====================
+    async function searchByUid(uid) {
+        try {
+            const userRef = ref(rtdb, `users/${uid}`);
+            const snapshot = await get(userRef);
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                return { uid, name: data.name, email: data.email, avatarBase64: data.avatarBase64 };
             }
+        } catch(err) {
+            console.warn("Search error:", err);
         }
-        
-        updateDebug(`Результатов поиска: ${results.length}`);
-        return results;
+        return null;
     }
     
     async function renderSearchResults(query) {
-        const results = await searchUsersDirect(query, currentSearchType);
-        let container = document.getElementById('searchResults');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'searchResults';
-            container.className = 'search-results';
-            document.querySelector('.search-container').appendChild(container);
+        const container = document.getElementById('searchResults');
+        if (!query.trim()) { 
+            container.innerHTML = ''; 
+            return; 
         }
         
-        if (!query.trim()) { container.innerHTML = ''; return; }
+        container.innerHTML = '<div class="search-result-item" style="justify-content:center;">🔍 Поиск...</div>';
         
-        if (results.length === 0) {
-            container.innerHTML = '<div class="search-result-item" style="justify-content:center;color:#666;">❌ Пользователь не найден<br><span style="font-size:10px;">Проверьте правильность UID</span></div>';
+        const user = await searchByUid(query.trim());
+        
+        if (!user || user.uid === currentUser.uid) {
+            container.innerHTML = '<div class="search-result-item" style="justify-content:center;color:#666;">❌ Пользователь не найден</div>';
             return;
         }
         
-        container.innerHTML = results.map(user => `
+        container.innerHTML = `
             <div class="search-result-item" data-user-id="${user.uid}">
-                <div class="avatar" style="width:40px;height:40px;">${user.avatarBase64 ? `<img src="${user.avatarBase64}">` : (user.name ? user.name.charAt(0).toUpperCase() : '?')}</div>
+                <div class="avatar" style="width:40px;height:40px;">${user.avatarBase64 ? `<img src="${user.avatarBase64}">` : user.name.charAt(0).toUpperCase()}</div>
                 <div style="flex:1;">
-                    <div><strong>${escapeHtml(user.name || 'Без имени')}</strong></div>
+                    <div><strong>${escapeHtml(user.name)}</strong></div>
                     <div style="font-size:10px;color:#888;font-family:monospace;">UID: ${user.uid.substring(0, 10)}...</div>
-                    <div style="font-size:9px;color:#666;">${user.email || ''}</div>
                 </div>
                 <button style="background:#4caf50;border:none;padding:6px 12px;border-radius:20px;cursor:pointer;">➕ Написать</button>
             </div>
-        `).join('');
+        `;
         
-        document.querySelectorAll('.search-result-item').forEach(el => {
-            el.onclick = async () => {
-                const peerId = el.dataset.userId;
-                const peerInfo = usersCache.get(peerId) || { name: 'Пользователь', avatarBase64: null };
-                const chatId = await createOrGetChat(peerId);
-                await loadUserChats();
-                openChat(chatId, peerId, peerInfo?.name || 'Пользователь', peerInfo?.avatarBase64);
-                document.getElementById('searchInput').value = '';
-                container.innerHTML = '';
-            };
+        document.querySelector('.search-result-item')?.addEventListener('click', async () => {
+            const chatId = await createOrGetChat(user.uid);
+            openChat(chatId, user.uid, user.name, user.avatarBase64);
+            document.getElementById('searchInput').value = '';
+            container.innerHTML = '';
         });
     }
     
     function renderChatsList() {
         const container = document.getElementById('chatsList');
-        if (chats.length === 0) { container.innerHTML = '<div class="no-items">✨ Нет чатов<br>Найдите друга по UID</div>'; return; }
+        if (chats.length === 0) { 
+            container.innerHTML = '<div class="no-items">✨ Нет чатов<br>Найдите друга по UID</div>'; 
+            return; 
+        }
         container.innerHTML = '';
         for (const chat of chats) {
             const isOnline = onlineStatuses.get(chat.peerId) || false;
@@ -634,12 +603,11 @@
             div.className = `chat-item ${currentChatId === chat.chatId ? 'active' : ''}`;
             div.innerHTML = `
                 <div class="chat-avatar" style="position:relative;">
-                    ${chat.peerAvatar ? `<img src="${chat.peerAvatar}">` : (chat.peerName ? chat.peerName.charAt(0).toUpperCase() : '?')}
+                    ${chat.peerAvatar ? `<img src="${chat.peerAvatar}">` : (chat.peerName?.charAt(0).toUpperCase() || '?')}
                     ${isOnline ? '<div class="online-dot"></div>' : ''}
                 </div>
                 <div class="chat-details">
                     <div class="chat-name">${escapeHtml(chat.peerName || 'Пользователь')}</div>
-                    <div style="font-size:9px;color:#666;font-family:monospace;">${chat.peerId.substring(0, 10)}...</div>
                     <div class="chat-last-msg">${escapeHtml(chat.lastMessage || 'Новый чат')}</div>
                 </div>
             `;
@@ -709,235 +677,18 @@
         modal.querySelector('#closeProfileBtn').onclick = () => modal.remove();
     }
     
-    // ==================== WEBRTC ЗВОНКИ ====================
-    async function startCall(isVideo) {
-        if (!currentChatPeerId) return;
-        callType = isVideo ? 'video' : 'audio';
-        
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: isVideo });
-            createCallWindow(isVideo);
-            
-            peerConnection = new RTCPeerConnection(configuration);
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-            
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    const candidatesRef = ref(rtdb, `calls/${currentCallId}/iceCandidates/${Date.now()}`);
-                    set(candidatesRef, { candidate: event.candidate.candidate, sdpMid: event.candidate.sdpMid, sdpMLineIndex: event.candidate.sdpMLineIndex });
-                }
-            };
-            
-            peerConnection.ontrack = (event) => {
-                const remoteVideo = document.getElementById('remoteVideo');
-                if (remoteVideo && event.streams[0]) remoteVideo.srcObject = event.streams[0];
-            };
-            
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            
-            currentCallId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-            const callRef = ref(rtdb, `calls/${currentCallId}`);
-            await set(callRef, {
-                from: currentUser.uid,
-                to: currentChatPeerId,
-                status: 'waiting',
-                offer: { type: offer.type, sdp: offer.sdp },
-                type: callType,
-                timestamp: Date.now()
-            });
-            
-            listenForCallResponse();
-        } catch (err) {
-            console.error("Start call error:", err);
-            alert("Не удалось получить доступ к микрофону/камере");
-        }
-    }
-    
-    function listenForCallResponse() {
-        const callRef = ref(rtdb, `calls/${currentCallId}`);
-        const listener = onValue(callRef, async (snapshot) => {
-            const data = snapshot.val();
-            if (!data) return;
-            
-            if (data.status === 'answered' && data.answer) {
-                off(listener);
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
-            } else if (data.status === 'rejected') {
-                off(listener);
-                endCall();
-                alert("Звонок отклонен");
-            } else if (data.status === 'ended') {
-                off(listener);
-                endCall();
-            }
-        });
-        callListeners.push(listener);
-    }
-    
-    function listenForIncomingCalls() {
-        const callsRef = ref(rtdb, 'calls');
-        onValue(callsRef, (snapshot) => {
-            const calls = snapshot.val();
-            if (!calls) return;
-            
-            for (const [callId, call] of Object.entries(calls)) {
-                if (call.to === currentUser.uid && call.status === 'waiting' && !currentCallId) {
-                    showIncomingCallNotification(callId, call);
-                }
-            }
-        });
-    }
-    
-    function showIncomingCallNotification(callId, call) {
-        const notification = document.createElement('div');
-        notification.className = 'call-notification';
-        notification.innerHTML = `
-            <div>📞 ${call.type === 'video' ? 'Видеозвонок' : 'Аудиозвонок'}</div>
-            <div style="margin-top: 10px;">
-                <button class="accept">✅ Принять</button>
-                <button class="reject">❌ Отклонить</button>
-            </div>
-        `;
-        document.body.appendChild(notification);
-        
-        notification.querySelector('.accept').onclick = async () => {
-            notification.remove();
-            await acceptCall(callId, call);
-        };
-        notification.querySelector('.reject').onclick = async () => {
-            notification.remove();
-            await update(ref(rtdb, `calls/${callId}`), { status: 'rejected' });
-        };
-        
-        setTimeout(() => { if (notification.parentNode) notification.remove(); }, 30000);
-    }
-    
-    async function acceptCall(callId, call) {
-        currentCallId = callId;
-        callType = call.type;
-        
-        try {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: call.type === 'video' });
-            createCallWindow(call.type === 'video');
-            
-            peerConnection = new RTCPeerConnection(configuration);
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-            
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    const candidatesRef = ref(rtdb, `calls/${currentCallId}/iceCandidates/${Date.now()}`);
-                    set(candidatesRef, { candidate: event.candidate.candidate, sdpMid: event.candidate.sdpMid, sdpMLineIndex: event.candidate.sdpMLineIndex });
-                }
-            };
-            
-            peerConnection.ontrack = (event) => {
-                const remoteVideo = document.getElementById('remoteVideo');
-                if (remoteVideo && event.streams[0]) remoteVideo.srcObject = event.streams[0];
-            };
-            
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(call.offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            
-            await update(ref(rtdb, `calls/${callId}`), { status: 'answered', answer: { type: answer.type, sdp: answer.sdp } });
-            
-            // Слушаем ICE кандидаты
-            const candidatesRef = ref(rtdb, `calls/${callId}/iceCandidates`);
-            onValue(candidatesRef, (snapshot) => {
-                const candidates = snapshot.val();
-                if (candidates && peerConnection) {
-                    for (const [key, cand] of Object.entries(candidates)) {
-                        peerConnection.addIceCandidate(new RTCIceCandidate(cand));
-                    }
-                }
-            });
-        } catch (err) {
-            console.error("Accept call error:", err);
-        }
-    }
-    
-    function createCallWindow(isVideo) {
-        const existing = document.getElementById('callWindow');
-        if (existing) existing.remove();
-        
-        const window = document.createElement('div');
-        window.id = 'callWindow';
-        window.className = 'call-window';
-        window.innerHTML = `
-            <div class="video-container">
-                ${isVideo ? '<video id="localVideo" autoplay muted playsinline></video>' : '<div style="text-align:center;padding:40px;">🎤 Аудиозвонок...</div>'}
-                ${isVideo ? '<video id="remoteVideo" autoplay playsinline></video>' : ''}
-            </div>
-            <div class="call-controls">
-                <button id="endCallBtn" class="end-call">🔴 Завершить</button>
-                ${!isVideo ? '<button id="muteBtn">🔇 Выкл. микрофон</button>' : ''}
-            </div>
-        `;
-        document.body.appendChild(window);
-        
-        if (isVideo && localStream) {
-            const localVideo = document.getElementById('localVideo');
-            if (localVideo) localVideo.srcObject = localStream;
-        }
-        
-        document.getElementById('endCallBtn').onclick = () => endCall();
-        if (!isVideo) {
-            let muted = false;
-            document.getElementById('muteBtn').onclick = () => {
-                if (localStream) {
-                    muted = !muted;
-                    localStream.getAudioTracks()[0].enabled = !muted;
-                    document.getElementById('muteBtn').innerHTML = muted ? '🎤 Вкл. микрофон' : '🔇 Выкл. микрофон';
-                }
-            };
-        }
-    }
-    
-    async function endCall() {
-        if (currentCallId) {
-            await update(ref(rtdb, `calls/${currentCallId}`), { status: 'ended' });
-        }
-        if (peerConnection) peerConnection.close();
-        if (localStream) localStream.getTracks().forEach(track => track.stop());
-        const callWindow = document.getElementById('callWindow');
-        if (callWindow) callWindow.remove();
-        peerConnection = null;
-        localStream = null;
-        currentCallId = null;
-        callListeners.forEach(listener => off(listener));
-        callListeners = [];
-    }
-    
     // ==================== ИНИЦИАЛИЗАЦИЯ ====================
     async function initApp() {
         document.getElementById('connectionStatus').className = 'connection-status online';
         document.getElementById('connectionStatus').innerHTML = '🟢 Онлайн';
         updateProfileUI();
         startPresence();
-        listenForIncomingCalls();
-        
-        await loadUserChats();
+        subscribeToChats();
         
         const searchInput = document.getElementById('searchInput');
-        searchInput.placeholder = "🔍 Введите UID друга (полностью или частично)";
+        searchInput.placeholder = "🔍 Введите UID друга (полностью)";
         searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
         document.getElementById('searchBtn').onclick = () => renderSearchResults(searchInput.value);
-        
-        document.querySelectorAll('.search-type-btn').forEach(btn => {
-            btn.onclick = () => {
-                document.querySelectorAll('.search-type-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentSearchType = btn.dataset.searchType;
-                searchInput.placeholder = currentSearchType === 'uid' ? "🔍 Введите UID друга" : "👤 Введите имя пользователя";
-                renderSearchResults(searchInput.value);
-            };
-        });
-        
-        document.getElementById('audioCallBtn').onclick = () => startCall(false);
-        document.getElementById('videoCallBtn').onclick = () => startCall(true);
-        
-        updateDebug(`Готов к работе! Ваш UID: ${currentUser.uid.substring(0, 12)}...`);
     }
     
     function bindEvents() {
