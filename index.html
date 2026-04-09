@@ -250,13 +250,13 @@
     let unsubscribeMessages = null;
     let unsubscribeChats = null;
     let currentSearchType = 'uid';
+    let callsListenerStarted = false;
     
     // WebRTC
     let peerConnection = null;
     let localStream = null;
     let currentCallId = null;
     let ringingInterval = null;
-    let callTypeGlobal = null;
     
     const configuration = {
         iceServers: [
@@ -837,7 +837,7 @@
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
             
-            currentCallId = `call_${Date.now()}`;
+            currentCallId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
             await set(ref(rtdb, `calls/${currentCallId}`), {
                 from: currentUser.uid,
                 to: currentChatPeerId,
@@ -848,11 +848,13 @@
             });
             
             console.log("📞 Звонок отправлен пользователю:", currentChatPeerId);
+            console.log("📞 Данные звонка:", { from: currentUser.uid, to: currentChatPeerId, callId: currentCallId });
             
             // Слушаем ответ
             const callRef = ref(rtdb, `calls/${currentCallId}`);
             const listener = onValue(callRef, async (snap) => {
                 const data = snap.val();
+                console.log("📞 Статус звонка обновлён:", data?.status);
                 if (data?.status === 'answered' && data.answer) {
                     off(listener);
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -875,13 +877,23 @@
     
     // Слушаем входящие звонки
     function listenForCalls() {
+        if (callsListenerStarted) return;
+        callsListenerStarted = true;
+        
+        console.log("📞 Запущен слушатель входящих звонков для пользователя:", currentUser?.uid);
+        
         const callsRef = ref(rtdb, 'calls');
         onValue(callsRef, (snapshot) => {
             const calls = snapshot.val();
+            console.log("📞 Проверка звонков, текущий пользователь:", currentUser?.uid);
+            console.log("📞 Все звонки в БД:", calls);
+            
             if (!calls) return;
             
             for (const [callId, call] of Object.entries(calls)) {
+                console.log(`📞 Звонок ${callId}: to=${call.to}, status=${call.status}, currentUser=${currentUser?.uid}`);
                 if (call.to === currentUser?.uid && call.status === 'waiting' && !currentCallId) {
+                    console.log("📞 НАЙДЕН ВХОДЯЩИЙ ЗВОНОК!", call);
                     showIncomingCall(callId, call);
                 }
             }
@@ -889,6 +901,7 @@
     }
     
     function showIncomingCall(callId, call) {
+        console.log("📞 ПОКАЗЫВАЕМ УВЕДОМЛЕНИЕ о звонке");
         playRingSound();
         if (ringingInterval) clearInterval(ringingInterval);
         ringingInterval = setInterval(playRingSound, 2000);
@@ -1008,7 +1021,11 @@
         updateProfileUI();
         startPresence();
         subscribeToChats();
-        listenForCalls();
+        
+        // Запускаем слушатель звонков ПОСЛЕ того как currentUser установлен
+        setTimeout(() => {
+            listenForCalls();
+        }, 1000);
         
         // Группы и каналы (заглушки)
         groups = [
