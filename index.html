@@ -80,7 +80,6 @@
         .modal-content button.danger { background: #c42e2e; }
         .google-btn { background: #fff; color: #000; display: flex; align-items: center; justify-content: center; gap: 10px; }
         .google-btn:hover { background: #f0f0f0; }
-        .google-btn img { width: 20px; height: 20px; }
         .divider { display: flex; align-items: center; text-align: center; margin: 20px 0; color: #666; }
         .divider::before, .divider::after { content: ''; flex: 1; border-bottom: 1px solid #2c2c2c; }
         .divider span { margin: 0 10px; font-size: 12px; }
@@ -88,16 +87,13 @@
         .avatar-preview { width: 100px; height: 100px; border-radius: 50%; background: #2a2a2a; margin: 0 auto 15px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
         .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
         .file-input-label { background: #4caf50; padding: 8px 16px; border-radius: 20px; cursor: pointer; font-size: 12px; display: inline-block; }
-        .draw-area { text-align: center; margin: 20px 0; }
-        .drawing-canvas { background: white; border-radius: 50%; cursor: crosshair; margin: 0 auto; display: block; }
         .my-id-display { background: #1a1a1a; padding: 12px; border-radius: 16px; margin: 15px 0; word-break: break-all; font-size: 12px; text-align: center; }
         .my-id-display span { color: #4caf50; font-family: monospace; user-select: all; cursor: pointer; }
         .no-items { text-align: center; color: #666; padding: 40px 20px; font-size: 14px; }
         .typing-indicator { font-size: 12px; color: #888; padding: 8px 20px; font-style: italic; }
         .search-results { background: #1a1a1a; border-radius: 12px; margin-top: 8px; max-height: 200px; overflow-y: auto; }
-        .search-result-item { padding: 10px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-bottom: 1px solid #2c2c2c; }
+        .search-result-item { padding: 10px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; border-bottom: 1px solid #2c2c2c; transition: background 0.2s; }
         .search-result-item:hover { background: #2a2a2a; }
-        .draw-controls { display: flex; gap: 10px; margin-top: 16px; justify-content: center; }
         .heartbeat-status { font-size: 10px; padding: 2px 6px; border-radius: 10px; background: #2a2a2a; margin-left: 8px; }
         .heartbeat-status.active { background: #4caf50; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
@@ -115,7 +111,7 @@
         </div>
         <div class="search-container">
             <div class="search-input-wrapper">
-                <input type="text" class="search-input" id="searchInput" placeholder="🔍 Поиск по UID или имени...">
+                <input type="text" class="search-input" id="searchInput" placeholder="🔍 Поиск по UID...">
                 <button class="search-btn" id="searchBtn">🔍</button>
             </div>
             <div class="search-type">
@@ -145,7 +141,7 @@
                     <div class="peer-status" id="peerStatus">⚪ Выберите чат</div>
                 </div>
             </div>
-            <div class="heartbeat-status" id="heartbeatStatus">❤️ Heartbeat</div>
+            <div class="heartbeat-status" id="heartbeatStatus">❤️</div>
         </div>
         <div class="messages-area" id="messagesArea">
             <div class="no-items" style="margin-top:60px;">💬 Добро пожаловать в Ww!<br>Зарегистрируйтесь по email</div>
@@ -171,7 +167,7 @@
         GoogleAuthProvider,
         signInWithPopup
     } from "firebase/auth";
-    import { getDatabase, ref, set, update, onValue, off, push, onDisconnect } from "firebase/database";
+    import { getDatabase, ref, set, update, onValue, off, onDisconnect } from "firebase/database";
     import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, addDoc, onSnapshot, orderBy, query } from "firebase/firestore";
     import { getAnalytics } from "firebase/analytics";
 
@@ -207,32 +203,13 @@
     let usersCache = new Map();
     let typingRef = null;
     let typingTimeout = null;
-    let presenceInterval = null;
     let heartbeatInterval = null;
     let unsubscribeMessages = null;
     let currentSearchType = 'uid';
-    let lastHeartbeatAck = Date.now();
-    let heartbeatMissCount = 0;
+    let allUsers = []; // Кэш всех пользователей для поиска
     
     // ==================== ВСПОМОГАТЕЛЬНЫЕ ====================
     function escapeHtml(str) { if (!str) return ''; return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m])); }
-    
-    function generateHeartbeatPacket() {
-        // Генерируем 16-битный пакет (2 байта)
-        // Формат: [timestamp_low, timestamp_high, sequence, checksum]
-        const timestamp = Date.now() % 65536;
-        const sequence = Math.floor(Math.random() * 256);
-        const checksum = (timestamp + sequence) % 256;
-        return new Uint8Array([timestamp >> 8, timestamp & 0xFF, sequence, checksum]);
-    }
-    
-    function validateHeartbeatPacket(packet) {
-        if (packet.length !== 4) return false;
-        const timestamp = (packet[0] << 8) | packet[1];
-        const sequence = packet[2];
-        const checksum = packet[3];
-        return checksum === ((timestamp + sequence) % 256);
-    }
     
     function compressAvatar(file, maxSize = 80) {
         return new Promise((resolve, reject) => {
@@ -260,57 +237,39 @@
     function startHeartbeat() {
         if (heartbeatInterval) clearInterval(heartbeatInterval);
         
-        // Создаем узел для heartbeat в RTDB
         const heartbeatRef = ref(rtdb, `heartbeats/${currentUser.uid}`);
-        
-        // Устанавливаем onDisconnect для автоматической очистки при отключении
         onDisconnect(heartbeatRef).remove();
         
+        // Обновляем статус онлайн в реальном времени
+        const updateOnlineStatus = () => {
+            update(ref(rtdb, `users/${currentUser.uid}`), { 
+                status: 'online', 
+                lastSeen: Date.now() 
+            }).catch(err => console.warn("Status update error:", err));
+        };
+        
+        // Отправляем heartbeat каждые 10 секунд
         heartbeatInterval = setInterval(async () => {
             try {
-                // Генерируем 16-битный пакет (4 байта)
-                const packet = generateHeartbeatPacket();
-                const packetHex = Array.from(packet).map(b => b.toString(16).padStart(2, '0')).join('');
-                
-                // Отправляем пакет в базу данных
                 const heartbeatData = {
-                    packet: packetHex,
                     timestamp: Date.now(),
-                    sequence: packet[2]
+                    sequence: Math.floor(Math.random() * 65535)
                 };
                 
                 await set(heartbeatRef, heartbeatData);
+                updateOnlineStatus();
                 
-                // Обновляем UI индикатор
+                // Визуальный фидбек
                 const heartbeatStatus = document.getElementById('heartbeatStatus');
                 heartbeatStatus.classList.add('active');
                 setTimeout(() => heartbeatStatus.classList.remove('active'), 500);
                 
-                // Обновляем статус онлайн в реальном времени
-                await updateStatus('online');
-                
-                // Слушаем ответ от сервера (для проверки связи)
-                const ackRef = ref(rtdb, `heartbeat_ack/${currentUser.uid}`);
-                const ackListener = onValue(ackRef, (snapshot) => {
-                    if (snapshot.exists()) {
-                        lastHeartbeatAck = Date.now();
-                        heartbeatMissCount = 0;
-                        off(ackRef);
-                    }
-                }, { onlyOnce: true });
-                
-                setTimeout(() => off(ackRef), 3000);
-                
             } catch (err) {
                 console.warn("Heartbeat error:", err);
-                heartbeatMissCount++;
-                
-                if (heartbeatMissCount >= 3) {
-                    console.warn("Connection lost - marking as offline");
-                    updateStatus('offline');
-                }
             }
-        }, 5000); // Каждые 5 секунд отправляем heartbeat
+        }, 10000);
+        
+        updateOnlineStatus();
     }
     
     // ==================== АУТЕНТИФИКАЦИЯ ====================
@@ -320,7 +279,6 @@
         modal.innerHTML = `
             <div class="modal-content">
                 <h2>🔐 Ww Мессенджер</h2>
-                
                 <button id="googleSignInBtn" class="google-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -330,28 +288,23 @@
                     </svg>
                     Войти через Google
                 </button>
-                
                 <div class="divider"><span>или</span></div>
-                
                 <div style="display:flex; gap:10px; margin-bottom:20px;">
                     <button id="loginTabBtn" style="flex:1; background:#4caf50;">Вход</button>
                     <button id="registerTabBtn" style="flex:1; background:#3a3a3a;">Регистрация</button>
                 </div>
-                
                 <div id="loginForm">
                     <input type="email" id="loginEmail" placeholder="Email">
                     <input type="password" id="loginPassword" placeholder="Пароль">
                     <button id="forgotPasswordBtn" class="secondary" style="background:#3a3a3a;">🔑 Забыли пароль?</button>
                     <button id="loginBtn">🔑 Войти</button>
                 </div>
-                
                 <div id="registerForm" style="display:none;">
                     <input type="text" id="regName" placeholder="Ваше имя">
                     <input type="email" id="regEmail" placeholder="Email">
                     <input type="password" id="regPassword" placeholder="Пароль (мин. 6 символов)">
                     <button id="registerBtn">📝 Зарегистрироваться</button>
                 </div>
-                
                 <button id="closeAuthBtn" class="secondary" style="background:#3a3a3a; margin-top:10px;">Закрыть</button>
             </div>
         `;
@@ -387,11 +340,7 @@
                 modal.remove();
             } catch(err) {
                 console.error("Google auth error:", err);
-                if (err.code === 'auth/popup-blocked') {
-                    alert("Пожалуйста, разрешите всплывающие окна для этого сайта");
-                } else {
-                    alert("Ошибка при входе через Google: " + err.message);
-                }
+                alert("Ошибка при входе через Google: " + err.message);
             }
         };
         
@@ -465,26 +414,43 @@
     }
     
     async function updateStatus(status) {
-        await update(ref(rtdb, `users/${currentUser.uid}`), { status: status, lastSeen: Date.now() });
+        try {
+            await update(ref(rtdb, `users/${currentUser.uid}`), { status: status, lastSeen: Date.now() });
+        } catch(err) {
+            console.warn("Status update error:", err);
+        }
     }
     
     function startPresence() {
-        updateStatus('online');
-        startHeartbeat(); // Запускаем heartbeat вместо обычного интервала
+        startHeartbeat();
         
         window.addEventListener('beforeunload', () => {
             updateStatus('offline');
             if (heartbeatInterval) clearInterval(heartbeatInterval);
         });
         
+        // Загружаем всех пользователей в кэш для поиска
         const usersRef = ref(rtdb, 'users');
         onValue(usersRef, (snapshot) => {
             const users = snapshot.val() || {};
+            allUsers = [];
             for (const [uid, data] of Object.entries(users)) {
                 if (uid !== currentUser.uid) {
-                    const isOnline = data.status === 'online' && (Date.now() - (data.lastSeen || 0) < 10000); // 10 секунд таймаут
+                    const isOnline = data.status === 'online' && (Date.now() - (data.lastSeen || 0) < 30000);
                     onlineStatuses.set(uid, isOnline);
-                    usersCache.set(uid, { name: data.name, email: data.email, avatarBase64: data.avatarBase64, bio: data.bio });
+                    usersCache.set(uid, { 
+                        name: data.name, 
+                        email: data.email, 
+                        avatarBase64: data.avatarBase64, 
+                        bio: data.bio,
+                        uid: uid
+                    });
+                    allUsers.push({
+                        uid: uid,
+                        name: data.name,
+                        email: data.email,
+                        avatarBase64: data.avatarBase64
+                    });
                 }
             }
             renderChatsList();
@@ -508,7 +474,7 @@
                 if (chatDoc.exists()) {
                     const chatData = chatDoc.data();
                     const peerId = chatData.participants.find(p => p !== currentUser.uid);
-                    const peerInfo = usersCache.get(peerId) || { name: 'Загрузка...', email: '' };
+                    const peerInfo = usersCache.get(peerId) || { name: 'Загрузка...', email: '', uid: peerId };
                     chats.push({
                         chatId: chatId,
                         peerId: peerId,
@@ -627,28 +593,24 @@
     // ==================== ПОИСК ПО UID ====================
     async function searchUsers(query, searchType) {
         if (!query.trim()) return [];
-        const usersRef = ref(rtdb, 'users');
-        const snapshot = await new Promise((resolve) => {
-            onValue(usersRef, resolve, { onlyOnce: true });
-        });
-        const users = snapshot.val() || {};
-        const results = [];
         
-        for (const [uid, data] of Object.entries(users)) {
-            if (uid === currentUser.uid) continue;
-            
+        const results = [];
+        const searchLower = query.toLowerCase().trim();
+        
+        for (const user of allUsers) {
             if (searchType === 'uid') {
-                // Поиск по UID (точное совпадение или частичное)
-                if (uid.toLowerCase().includes(query.toLowerCase())) {
-                    results.push({ uid, name: data.name, email: data.email, avatarBase64: data.avatarBase64 });
+                // Поиск по UID (частичное совпадение)
+                if (user.uid.toLowerCase().includes(searchLower)) {
+                    results.push(user);
                 }
             } else if (searchType === 'name') {
                 // Поиск по имени
-                if (data.name && data.name.toLowerCase().includes(query.toLowerCase())) {
-                    results.push({ uid, name: data.name, email: data.email, avatarBase64: data.avatarBase64 });
+                if (user.name && user.name.toLowerCase().includes(searchLower)) {
+                    results.push(user);
                 }
             }
         }
+        
         return results;
     }
     
@@ -662,27 +624,32 @@
             document.querySelector('.search-container').appendChild(container);
         }
         
-        if (!query.trim() || results.length === 0) { 
-            container.innerHTML = results.length === 0 && query.trim() ? 
-                '<div class="search-result-item" style="justify-content:center;color:#666;">❌ Пользователь не найден</div>' : '';
-            return; 
+        if (!query.trim()) {
+            container.innerHTML = '';
+            return;
+        }
+        
+        if (results.length === 0) {
+            container.innerHTML = '<div class="search-result-item" style="justify-content:center;color:#666;">❌ Пользователь не найден</div>';
+            return;
         }
         
         container.innerHTML = results.map(user => `
             <div class="search-result-item" data-user-id="${user.uid}">
-                <div class="avatar" style="width:40px;height:40px;">${user.avatarBase64 ? `<img src="${user.avatarBase64}">` : user.name.charAt(0).toUpperCase()}</div>
+                <div class="avatar" style="width:40px;height:40px;">${user.avatarBase64 ? `<img src="${user.avatarBase64}">` : (user.name ? user.name.charAt(0).toUpperCase() : '?')}</div>
                 <div style="flex:1;">
-                    <div><strong>${escapeHtml(user.name)}</strong></div>
-                    <div style="font-size:10px;color:#888;font-family:monospace;">UID: ${user.uid.substring(0, 8)}...</div>
-                    <div style="font-size:10px;color:#666;">${user.email}</div>
+                    <div><strong>${escapeHtml(user.name || 'Без имени')}</strong></div>
+                    <div style="font-size:10px;color:#888;font-family:monospace;">UID: ${user.uid.substring(0, 8)}...${user.uid.substring(user.uid.length - 4)}</div>
+                    <div style="font-size:10px;color:#666;">${user.email || 'Нет email'}</div>
                 </div>
-                <button style="background:#4caf50;border:none;padding:6px 12px;border-radius:20px;cursor:pointer;">➕</button>
+                <button style="background:#4caf50;border:none;padding:6px 12px;border-radius:20px;cursor:pointer;font-size:12px;">➕</button>
             </div>
         `).join('');
         
         document.querySelectorAll('.search-result-item').forEach(el => {
+            const btn = el.querySelector('button');
             el.onclick = async (e) => {
-                if (e.target.tagName === 'BUTTON') e.stopPropagation();
+                if (e.target === btn) e.stopPropagation();
                 const peerId = el.dataset.userId;
                 const peerInfo = usersCache.get(peerId);
                 const chatId = await createOrGetChat(peerId);
@@ -707,11 +674,11 @@
             div.className = `chat-item ${currentChatId === chat.chatId ? 'active' : ''}`;
             div.innerHTML = `
                 <div class="chat-avatar" style="position:relative;">
-                    ${chat.peerAvatar ? `<img src="${chat.peerAvatar}">` : chat.peerName.charAt(0).toUpperCase()}
+                    ${chat.peerAvatar ? `<img src="${chat.peerAvatar}">` : (chat.peerName ? chat.peerName.charAt(0).toUpperCase() : '?')}
                     ${isOnline ? '<div class="online-dot"></div>' : ''}
                 </div>
                 <div class="chat-details">
-                    <div class="chat-name">${escapeHtml(chat.peerName)}</div>
+                    <div class="chat-name">${escapeHtml(chat.peerName || 'Пользователь')}</div>
                     <div style="font-size:9px;color:#666;font-family:monospace;">${chat.peerId.substring(0, 10)}...</div>
                     <div class="chat-last-msg">${escapeHtml(chat.lastMessage || 'Новый чат')}</div>
                 </div>
@@ -867,18 +834,10 @@
         updateProfileUI();
         startPresence();
         
-        const usersRef = ref(rtdb, 'users');
-        const snapshot = await new Promise((resolve) => {
-            onValue(usersRef, resolve, { onlyOnce: true });
-        });
-        const users = snapshot.val() || {};
-        for (const [uid, data] of Object.entries(users)) {
-            usersCache.set(uid, { name: data.name, email: data.email, avatarBase64: data.avatarBase64, bio: data.bio });
-        }
         await loadUserChats();
         
         const searchInput = document.getElementById('searchInput');
-        searchInput.placeholder = "🔍 Поиск по UID (например: " + currentUser.uid.substring(0, 8) + "...)";
+        searchInput.placeholder = "🔍 Поиск по UID (вставьте UID друга)";
         searchInput.addEventListener('input', (e) => renderSearchResults(e.target.value));
         document.getElementById('searchBtn').onclick = () => renderSearchResults(searchInput.value);
         
