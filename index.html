@@ -85,6 +85,8 @@
             }
             .chat-header {
                 padding-left: 60px !important;
+                padding-top: 12px !important;
+                padding-bottom: 12px !important;
             }
             .message {
                 max-width: 85% !important;
@@ -102,12 +104,12 @@
                 padding: 8px !important;
             }
             .call-btn, .send-btn, .search-btn {
-                width: 44px !important;
-                height: 44px !important;
+                width: 48px !important;
+                height: 48px !important;
             }
             .message-input {
                 font-size: 16px !important;
-                padding: 12px 16px !important;
+                padding: 14px 18px !important;
             }
             .avatar {
                 width: 44px !important;
@@ -128,6 +130,29 @@
             .modal-content {
                 width: 95% !important;
                 padding: 20px !important;
+            }
+            
+            /* Увеличенная область ввода для мобильных */
+            .input-area {
+                padding: 12px 16px !important;
+                padding-bottom: calc(12px + env(safe-area-inset-bottom, 12px)) !important;
+                background: #0e0e0e;
+                border-top: 1px solid #202020;
+            }
+            .message-input {
+                padding: 14px 18px !important;
+                font-size: 16px !important;
+                min-height: 48px !important;
+            }
+            .send-btn {
+                width: 48px !important;
+                height: 48px !important;
+                min-width: 48px !important;
+            }
+            
+            /* Дополнительный отступ снизу для безопасной зоны */
+            .chat-area {
+                padding-bottom: env(safe-area-inset-bottom, 0);
             }
         }
         
@@ -241,9 +266,40 @@
         .message-time { font-size: 9px; color: #aaa; margin-top: 4px; text-align: right; }
         .message-sender { font-size: 10px; color: #888; margin-bottom: 4px; }
         
-        .input-area { padding: 12px 16px; background: #0e0e0e; border-top: 1px solid #202020; display: flex; gap: 10px; }
-        .message-input { flex: 1; padding: 12px 16px; background: #1a1a1a; border: 1px solid #2c2c2c; color: white; border-radius: 28px; outline: none; font-size: 15px; -webkit-appearance: none; }
-        .send-btn { background: #4caf50; border: none; color: white; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; font-size: 18px; touch-action: manipulation; }
+        /* Увеличенная область ввода сообщения */
+        .input-area { 
+            padding: 12px 16px; 
+            background: #0e0e0e; 
+            border-top: 1px solid #202020; 
+            display: flex; 
+            gap: 12px; 
+            align-items: center;
+        }
+        .message-input { 
+            flex: 1; 
+            padding: 12px 18px; 
+            background: #1a1a1a; 
+            border: 1px solid #2c2c2c; 
+            color: white; 
+            border-radius: 28px; 
+            outline: none; 
+            font-size: 15px; 
+            -webkit-appearance: none;
+            min-height: 44px;
+            line-height: 1.4;
+        }
+        .send-btn { 
+            background: #4caf50; 
+            border: none; 
+            color: white; 
+            width: 44px; 
+            height: 44px; 
+            border-radius: 50%; 
+            cursor: pointer; 
+            font-size: 18px; 
+            touch-action: manipulation;
+            flex-shrink: 0;
+        }
         
         .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.96); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
         .modal-content { background: #131313; padding: 24px; border-radius: 24px; width: 90%; max-width: 400px; max-height: 85vh; overflow-y: auto; }
@@ -280,6 +336,21 @@
         @media (max-width: 768px) {
             ::-webkit-scrollbar {
                 width: 2px;
+            }
+            
+            /* Дополнительный отступ для безопасной зоны на iPhone */
+            .input-area {
+                padding-bottom: max(12px, env(safe-area-inset-bottom)) !important;
+            }
+        }
+        
+        /* Адаптация под устройства с вырезом (iPhone) */
+        @supports (padding: max(0px)) {
+            .input-area {
+                padding-bottom: max(12px, env(safe-area-inset-bottom));
+            }
+            .chat-header {
+                padding-top: max(12px, env(safe-area-inset-top));
             }
         }
     </style>
